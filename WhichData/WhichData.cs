@@ -188,6 +188,8 @@ namespace WhichData
         public int m_leftColumnWidth = 325;
         public int m_resultTextBoxHeight = 110;
         public int m_barToEndPad = 2;
+        public Color m_inopWarnOrange = new Color(1.0f, 0.63f, 0.0f); //orangey gold
+        public int m_listFieldMaxHeight = 18; //height of each list row
         
         //state from ksp
         public GUIStyle m_stylePrevPage;
@@ -224,10 +226,15 @@ namespace WhichData
         public Vector2 m_scrollPos;
         public Texture2D m_dataIcon = null;
         public Texture2D m_scienceIcon = null;
-        public float m_sciRet0;
-        public float m_sciRet1;
-        public float m_sciTrns0;
-        public float m_sciTrns1;
+        public string m_dataFieldDataMsg;
+        public string m_dataFieldTrnsWarn;
+        public string m_rcvrFieldMsg;
+        public float m_rcvrFieldMainBar;
+        public float m_rcvrFieldBackBar;
+        public string m_trnsFieldMsg;
+        public float m_trnsFieldMainBar;
+        public float m_trnsFieldBackBar;
+        public string m_transBtnPerc;
         
 
         //mod state
@@ -269,9 +276,9 @@ namespace WhichData
                             //the skin's box GUIStyle already has the green text and nice top left align
                             GUILayout.Box(curPg.resultText, GUILayout.Height(m_resultTextBoxHeight));
 
-                            LayoutResultField("Data Size: " + curPg.dataSize.ToString("F1") + " Mits", curPg.showTransmitWarning ? "Inoperable after Transmitting." : null);
-                            LayoutResultField("Recovery: +" + curPg.scienceValue.ToString("F1") + " Science", true, m_sciRet0, m_sciRet1);
-                            LayoutResultField("Transmit: +" + curPg.transmitValue.ToString("F1") + " Science", false, m_sciTrns0, m_sciTrns1);
+                            LayoutResultField(m_dataFieldDataMsg, m_dataFieldTrnsWarn);
+                            LayoutResultField(m_rcvrFieldMsg, true, m_rcvrFieldMainBar, m_rcvrFieldBackBar);
+                            LayoutResultField(m_trnsFieldMsg, false, m_trnsFieldMainBar, m_trnsFieldBackBar);
 
                         } GUILayout.EndVertical();
 
@@ -279,25 +286,17 @@ namespace WhichData
                         GUILayout.BeginVertical();
                         {
                             //GUI.tooltip = "Discard Data";//HACKJEFFGIFFEN tooltips missing
-                            GUILayout.Button(new GUIContent("", "tooltip"), m_styleDiscardButton);
+                            GUILayout.Button(new GUIContent("", "Discard Data"), m_styleDiscardButton);
                             // GUILayout.Button( "", m_dlgSkin.GetStyle("discard button"));
                             //GUI.tooltip = "Keep Data";
-                            GUILayout.Button("", m_styleKeepButton);
+                            GUILayout.Button(new GUIContent("", "Keep Data"), m_styleKeepButton);
                             //GUI.tooltip = "Transmit Data";
 
-                            GUILayout.Button((0.69 * 100).ToString() + "%", m_styleTransmitButton); //HACKJEFFGIFFEN only show % on > 0
+                            GUILayout.Button(m_transBtnPerc, m_styleTransmitButton);
                         } GUILayout.EndVertical();
 
                     } GUILayout.EndHorizontal();
 
-
-                    //  remaining todo:
-                    //  make transmit % be 0% when its 0
-                    //  make "inoperable after transmit" align and color
-                    //  make transmit light blue just be 5 px back off dark blue
-                    //  align the top of button with field
-
-                    //  figure out how to make a ConverterResults field clickable / highlight and shit
                 } GUILayout.EndVertical();
             } GUILayout.EndArea();
 
@@ -336,12 +335,15 @@ namespace WhichData
                 GUILayout.Label( text, m_styleRfText );
                 if (warning != null)
                 {
+                    Rect textRect = GUILayoutUtility.GetLastRect();
                     TextAnchor oldAnchor = m_styleRfText.alignment;
                     Color oldColor = GUI.color;
 
-                    m_styleRfText.alignment = TextAnchor.MiddleRight; //HACKJEFFGIFFEN align...doesnt
-                    GUI.color = Color.cyan;
-                    GUILayout.Label(warning, m_styleRfText);
+                    Rect totalField = new Rect(m_leftColumnWidth - m_progressBarWidth - m_barToEndPad, textRect.yMin, m_progressBarWidth, textRect.height);
+                    m_styleRfText.alignment = TextAnchor.MiddleRight;
+                    GUI.color = m_inopWarnOrange;
+                    GUI.Label( totalField, warning, m_styleRfText);
+
                     GUI.color = oldColor;
                     m_styleRfText.alignment = oldAnchor;
                 }
@@ -387,34 +389,57 @@ namespace WhichData
             listField.padding = new RectOffset(0, 0, 0, 0); //nerf padding
             GUIContent nothing = new GUIContent();
             //GUILayout.BeginHorizontal(m_styleRfBackground);
-            m_pageListButtons[i] = GUILayout.Button( nothing, listField, GUILayout.MaxHeight(18)); //HACKJEFFGIFFEN
+            m_pageListButtons[i] = GUILayout.Button( nothing, listField, GUILayout.MaxHeight(m_listFieldMaxHeight));
             Rect btRect = GUILayoutUtility.GetLastRect();
             {
-                //experi, rec sci, biome, sit, body
-                const int fields = 5;
+                //experi, rec sci/%max, trns sci/%max, data mits, biome, sit, body
+                //not atm lab points, disabling
+                const int fields = 7; //skip lab pts
                 float fieldWidth = btRect.width / fields;
                 Rect walker = btRect;
                 walker.width = fieldWidth;
                 
 
                 //HACKJEFFGIFFEN make colleciton of these
+                ScienceSubject s = ResearchAndDevelopment.GetSubjectByID(pg.pageData.subjectID);
                 SubjectBreakdown sb = new SubjectBreakdown( pg.pageData.subjectID );
 
+                //experi
                 GUI.Label(walker, sb.m_experi, m_styleRfText);
                 walker.x += walker.width;
 
+                //recvr
                 Color oldColor = GUI.color;
                 GUI.color = Color.green;
-                GUI.Label( walker, pg.scienceValue.ToString("F1"), m_styleRfText);
+                //HACKJEFFGIFFEN duplicate math
+                string recvrString = pg.scienceValue.ToString("F1") + "/" + (pg.scienceValue * m_sciHack * 100 / s.scienceCap).ToString("F0") + "%";
+                GUI.Label( walker, recvrString, m_styleRfText);
+                walker.x += walker.width;
+
+                //trans
+                GUI.color = Color.cyan;
+                string trnsString = pg.transmitValue.ToString("F1") + "/" + (pg.transmitValue * m_sciHack * 100 / s.scienceCap).ToString("F0") + "%";
+                GUI.Label(walker, trnsString, m_styleRfText);
                 walker.x += walker.width;
                 GUI.color = oldColor;
 
-                GUI.Label(walker, sb.m_hasBiome ? sb.m_biome : "Global", m_styleRfText);
+                //data mits
+                GUI.Label(walker, pg.dataSize + " Mits", m_styleRfText);
                 walker.x += walker.width;
 
+                //disabling
+                //GUI.Label(walker, pg.showTransmitWarning ? "Disbl" : "-", m_styleRfText);
+                //walker.x += walker.width;
+
+                //biome
+                GUI.Label(walker, sb.m_hasBiome ? sb.m_biome : "-", m_styleRfText);
+                walker.x += walker.width;
+
+                //situ
                 GUI.Label( walker, sb.m_situ, m_styleRfText);
                 walker.x += walker.width;
 
+                //body
                 GUI.Label(walker, sb.m_body, m_styleRfText);
                 walker.x += walker.width;
 
@@ -430,7 +455,7 @@ namespace WhichData
         public void LazyInit()
         {
             m_dlgSkin = ExperimentsResultDialog.Instance.guiSkin;
-
+            //these are the custom styles inside the ExperimentsResultDialog
             m_stylePrevPage =           m_dlgSkin.GetStyle("prev page");
             m_styleDiscardButton =      m_dlgSkin.GetStyle("discard button");
             m_styleKeepButton =         m_dlgSkin.GetStyle("keep button");
@@ -518,8 +543,7 @@ namespace WhichData
                 //lazy copy of assets from ksp on first run
                 if (m_dlgSkin == null) { LazyInit(); }
 
-                //steal pages
-                //HACKJEFFGIFFEN left in compare mode (both show)
+                //steal pages in compare mode (both show)
                 /*if (m_pages.Count == 0) //do only once to not flood
                 {
                     m_pages.AddRange(ExperimentsResultDialog.Instance.pages);
@@ -559,7 +583,7 @@ namespace WhichData
                 }
                 else
                 {
-                    //page toggles
+                    //page buttons
                     int toggleIndex = -1;
                     for (int i = 0; i < m_pageListButtons.Count; i++)
                     {
@@ -571,15 +595,30 @@ namespace WhichData
                         indUpdate = true;
                     }
                 }
-
+                
                 if ( indUpdate )
                 {
                     ExperimentResultDialogPage curPg = m_pages[m_curInd];
                     ScienceSubject s = ResearchAndDevelopment.GetSubjectByID(curPg.pageData.subjectID);
-                    m_sciRet0 = curPg.scienceValue * m_sciHack / s.scienceCap;
-                    m_sciRet1 = 1.0f - s.science / s.scienceCap;
-                    m_sciTrns0 = curPg.transmitValue * m_sciHack / s.scienceCap; //TODOJEFFGIFFEN AAAAUGH why god why
-                    m_sciTrns1 = m_sciRet1 * curPg.xmitDataScalar;
+                    
+                    m_dataFieldDataMsg = "Data Size: " + curPg.dataSize.ToString("F1") + " Mits";
+                    m_dataFieldTrnsWarn = curPg.showTransmitWarning ? "Inoperable after Transmitting." : null;
+
+                    m_rcvrFieldMsg = "Recovery: +" + curPg.scienceValue.ToString("F1") + " Science";
+                    m_rcvrFieldMainBar = curPg.scienceValue * m_sciHack / s.scienceCap; //shows this experi's value vs max possible
+                    m_rcvrFieldBackBar = 1.0f - s.science / s.scienceCap; //shows this experi's value when done next time vs max possible
+
+                    m_trnsFieldMsg = "Transmit: +" + curPg.transmitValue.ToString("F1") + " Science";
+                    m_trnsFieldMainBar = curPg.transmitValue * m_sciHack / s.scienceCap; //TODOJEFFGIFFEN AAAAUGH why god why
+                    m_trnsFieldBackBar = m_rcvrFieldBackBar * curPg.xmitDataScalar;
+
+                    //if transmit sci is 0pts, then % is 0
+                    m_transBtnPerc = (m_trnsFieldMainBar > 0.1f ? curPg.xmitDataScalar * 100 : 0.0f).ToString("F0") + "%";
+
+                    //  remaining todo:
+                    //  make transmit light blue just be 5 px back off dark blue
+                    //  align the top of button with field
+                    //  figure out how to make a ConverterResults field clickable / highlight and shit
                 }
             }
             /*Debug.Log("GA dataSize " + curPg.dataSize);

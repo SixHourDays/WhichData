@@ -50,7 +50,7 @@
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
   <PropertyGroup>
-    <PostBuildEvent>set SHD="X:\SteamLibrary\SteamApps\common\Kerbal Space ProgramDev\GameData\SixHourDays\"
+    <PostBuildEvent>set SHD="$(SolutionDir)..\Kerbal Space ProgramDev\GameData\SixHourDays\"
 if not exist %25SHD%25 mkdir %25SHD%25
 copy $(TargetPath) %25SHD%25</PostBuildEvent>
   </PropertyGroup>
