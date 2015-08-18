@@ -8,26 +8,46 @@ using System.IO;
 
 namespace WhichData
 {
-    struct SubjectBreakdown
+    public class DataPage
     {
+        //ksp data
+        public ExperimentResultDialogPage m_kspPage;
+        public ScienceSubject m_subject;
+        
+        //subjectID parsed
         public string m_experi;
         public string m_body;
         public string m_situ;
-        public bool m_hasBiome;
         public string m_biome;
-        public string m_subjectId;
 
-        public SubjectBreakdown(string subjectId)
+        //hud state
+        public bool m_rowButton;
+        public float m_rcvrPrcnt;
+        public float m_trnsPrcnt;
+        public string m_rcvrValue; //1 decimal accuracy
+        public string m_trnsValue; //..
+
+        //hacks 1
+        public float m_sciHack = 0.5f;
+
+        public DataPage(ExperimentResultDialogPage page)
         {
-            m_hasBiome = false;
-            m_experi = m_body = m_situ = m_biome = "";
+            m_kspPage = page;
+            m_subject = ResearchAndDevelopment.GetSubjectByID(m_kspPage.pageData.subjectID);
+
+            m_rowButton = false;
+            m_rcvrPrcnt = m_kspPage.scienceValue * m_sciHack / m_subject.scienceCap; //shows this experi's value vs max possible
+            m_trnsPrcnt = m_kspPage.transmitValue * m_sciHack / m_subject.scienceCap; //TODOJEFFGIFFEN AAAAUGH why god why (always too low)
+
+            m_rcvrValue = m_kspPage.scienceValue.ToString("F1");
+            m_trnsValue = m_kspPage.transmitValue.ToString("F1");
 
             //parse out subjectIDs of the form (we ditch the @):
             //  crewReport@KerbinSrfLandedLaunchPad
-            m_subjectId = subjectId;
+            m_experi = m_body = m_situ = m_biome = string.Empty;
 
             //experiment
-            string[] strings = subjectId.Split('@');
+            string[] strings = m_kspPage.pageData.subjectID.Split('@');
             m_experi = strings[0];                                                  // crewReport
 
             //body
@@ -44,7 +64,7 @@ namespace WhichData
             }
             if (m_body == "")
             {
-                Debug.Log("GA ERROR no body in id " + subjectId);
+                Debug.Log("GA ERROR no body in id " + m_kspPage.pageData.subjectID);
             }
 
             //situation
@@ -60,14 +80,13 @@ namespace WhichData
             }
             if (m_situ == "")
             {
-                Debug.Log("GA ERROR no situ in id " + subjectId);
+                Debug.Log("GA ERROR no situ in id " + m_kspPage.pageData.subjectID);
             }
 
             //biome
             //when a situation treats experiment as global, no biome name is appended, and subject will now be string.empty
             if (subject != string.Empty)
             {
-                m_hasBiome = true;
                 //TODOJEFFGIFFEN can't find a complete list of them programmatically,
                 //R&D doesnt return "R&D" or "Flag Pole" etc
                 m_biome = subject;                                                      //LaunchPad
@@ -173,7 +192,6 @@ namespace WhichData
         }
         
         //hacks
-        public float m_sciHack = 0.5f;
         public float m_barMinPx = 7.0f;
         
         //window pixel positions etc
@@ -213,13 +231,11 @@ namespace WhichData
         public float m_progressBarWidth;
         public float m_rightSideWidth;
         GUISkin m_dlgSkin;
-        public List<ExperimentResultDialogPage> m_pages = new List<ExperimentResultDialogPage>();
 
         //GUI state
         public bool m_prevBtDown = false;
         public bool m_nextBtDown = false;
-        //HACKJEFFGIFFEN
-        public List<bool> m_pageListButtons = new List<bool>();
+
         //
         //public bool m_discardBtDown = false;
         //
@@ -239,10 +255,11 @@ namespace WhichData
 
         //mod state
         public int m_curInd;
+        public List<DataPage> m_dataPages = new List<DataPage>();
 
         void OnGUI()
         {
-            if (m_pages.Count > 0)
+            if (m_dataPages.Count > 0)
             {
                 int uid = GUIUtility.GetControlID(FocusType.Passive); //get a nice unique window id from system
                 GUI.skin = m_dlgSkin;
@@ -252,7 +269,7 @@ namespace WhichData
 
         void WindowLayout(int windowID)
         {
-            ExperimentResultDialogPage curPg = m_pages[m_curInd];
+            DataPage curPg = m_dataPages[m_curInd];
             //6px border all around.  Then 14px of window title, 6px again below it to sync to orig window top.
             GUILayout.BeginArea(new Rect(m_padding, m_padding * 2 + m_windowTitleHeight, m_window.width - m_padding * 2, m_mainDlgHeight - m_padding * 2));
             {
@@ -262,7 +279,7 @@ namespace WhichData
                     GUILayout.BeginHorizontal();
                     {
                         m_prevBtDown = GUILayout.Button("", m_stylePrevPage, GUILayout.Width(m_pageButtonSize), GUILayout.Height(m_pageButtonSize + m_pageButtonPadding));
-                        GUILayout.Label(curPg.title, GUILayout.Width(m_titleWidth));
+                        GUILayout.Label(curPg.m_kspPage.title, GUILayout.Width(m_titleWidth));
                         m_nextBtDown = GUILayout.Button("", m_styleNextPage, GUILayout.Width(m_pageButtonSize), GUILayout.Height(m_pageButtonSize + m_pageButtonPadding));
                     } GUILayout.EndHorizontal();
 
@@ -274,7 +291,7 @@ namespace WhichData
                         GUILayout.BeginVertical(GUILayout.Width(m_leftColumnWidth)); //width of left column from orig dialog
                         {
                             //the skin's box GUIStyle already has the green text and nice top left align
-                            GUILayout.Box(curPg.resultText, GUILayout.Height(m_resultTextBoxHeight));
+                            GUILayout.Box(curPg.m_kspPage.resultText, GUILayout.Height(m_resultTextBoxHeight));
 
                             LayoutResultField(m_dataFieldDataMsg, m_dataFieldTrnsWarn);
                             LayoutResultField(m_rcvrFieldMsg, true, m_rcvrFieldMainBar, m_rcvrFieldBackBar);
@@ -315,7 +332,7 @@ namespace WhichData
                 ngs.padding = new RectOffset( 0, 0, 0, 0); //get rid of stupid left pad
                 m_scrollPos = GUILayout.BeginScrollView(m_scrollPos, ngs );
                 {
-                    for (int i = 0; i < m_pages.Count; i++)
+                    for (int i = 0; i < m_dataPages.Count; i++)
                     {
                         LayoutListField(i);
                     }
@@ -384,12 +401,12 @@ namespace WhichData
 
         public void LayoutListField( int i )
         {
-            ExperimentResultDialogPage pg = m_pages[ i ];
+            DataPage pg = m_dataPages[ i ];
             GUIStyle listField = new GUIStyle( m_dlgSkin.box );
             listField.padding = new RectOffset(0, 0, 0, 0); //nerf padding
             GUIContent nothing = new GUIContent();
             //GUILayout.BeginHorizontal(m_styleRfBackground);
-            m_pageListButtons[i] = GUILayout.Button( nothing, listField, GUILayout.MaxHeight(m_listFieldMaxHeight));
+            pg.m_rowButton = GUILayout.Button( nothing, listField, GUILayout.MaxHeight(m_listFieldMaxHeight));
             Rect btRect = GUILayoutUtility.GetLastRect();
             {
                 //experi, rec sci/%max, trns sci/%max, data mits, biome, sit, body
@@ -398,33 +415,28 @@ namespace WhichData
                 float fieldWidth = btRect.width / fields;
                 Rect walker = btRect;
                 walker.width = fieldWidth;
-                
-
-                //HACKJEFFGIFFEN make colleciton of these
-                ScienceSubject s = ResearchAndDevelopment.GetSubjectByID(pg.pageData.subjectID);
-                SubjectBreakdown sb = new SubjectBreakdown( pg.pageData.subjectID );
 
                 //experi
-                GUI.Label(walker, sb.m_experi, m_styleRfText);
+                GUI.Label(walker, pg.m_experi, m_styleRfText);
                 walker.x += walker.width;
 
                 //recvr
                 Color oldColor = GUI.color;
                 GUI.color = Color.green;
-                //HACKJEFFGIFFEN duplicate math
-                string recvrString = pg.scienceValue.ToString("F1") + "/" + (pg.scienceValue * m_sciHack * 100 / s.scienceCap).ToString("F0") + "%";
+
+                string recvrString = pg.m_rcvrValue + "/" + (pg.m_rcvrPrcnt * 100).ToString("F0") + "%";
                 GUI.Label( walker, recvrString, m_styleRfText);
                 walker.x += walker.width;
 
                 //trans
                 GUI.color = Color.cyan;
-                string trnsString = pg.transmitValue.ToString("F1") + "/" + (pg.transmitValue * m_sciHack * 100 / s.scienceCap).ToString("F0") + "%";
+                string trnsString = pg.m_trnsValue + "/" + (pg.m_trnsPrcnt * 100).ToString("F0") + "%";
                 GUI.Label(walker, trnsString, m_styleRfText);
                 walker.x += walker.width;
                 GUI.color = oldColor;
 
                 //data mits
-                GUI.Label(walker, pg.dataSize + " Mits", m_styleRfText);
+                GUI.Label(walker, pg.m_kspPage.dataSize + " Mits", m_styleRfText);
                 walker.x += walker.width;
 
                 //disabling
@@ -432,23 +444,17 @@ namespace WhichData
                 //walker.x += walker.width;
 
                 //biome
-                GUI.Label(walker, sb.m_hasBiome ? sb.m_biome : "-", m_styleRfText);
+                GUI.Label(walker, pg.m_biome == string.Empty ? "Global" : pg.m_biome , m_styleRfText);
                 walker.x += walker.width;
 
                 //situ
-                GUI.Label( walker, sb.m_situ, m_styleRfText);
+                GUI.Label(walker, pg.m_situ, m_styleRfText);
                 walker.x += walker.width;
 
                 //body
-                GUI.Label(walker, sb.m_body, m_styleRfText);
+                GUI.Label(walker, pg.m_body, m_styleRfText);
                 walker.x += walker.width;
 
-/*              GUI.Label( btRect, pg.scienceValue.ToString("F1"), m_styleRfText);
-                GUI.color = Color.blue;
-                GUI.Label( btRect, pg.transmitValue.ToString("F1"), m_styleRfText);
-                GUI.color = oldColor;
-                */
-                
             }// GUILayout.EndHorizontal();
         }
 
@@ -548,21 +554,19 @@ namespace WhichData
                 {
                     m_pages.AddRange(ExperimentsResultDialog.Instance.pages);
                 }
-                */
-                int count = ExperimentsResultDialog.Instance.pages.Count();
-                m_pages.AddRange(ExperimentsResultDialog.Instance.pages);
-                
-                //autoselect entry 0
-                if (m_pageListButtons.Count == 0)
+                 */
+
+                //autoselect entry 0 on first page copied in
+                if (m_dataPages.Count == 0)
                 {
-                    m_pageListButtons.Add(true);
                     m_curInd = 0;
                     indUpdate = true;
-                    count--;
                 }
-
-                while (count-- > 0) { m_pageListButtons.Add( false ); }
-
+                
+                foreach (ExperimentResultDialogPage resultPage in ExperimentsResultDialog.Instance.pages)
+                {
+                    m_dataPages.Add(new DataPage(resultPage));
+                }
 
                 ExperimentsResultDialog.Instance.pages.Clear();
                 Destroy(ExperimentsResultDialog.Instance.gameObject); //1 frame up still...ehh
@@ -573,47 +577,45 @@ namespace WhichData
                 //prev next buttons
                 if (m_prevBtDown)
                 {
-                    if ((m_curInd -= 1) < 0) { m_curInd = m_pages.Count() - 1; }
+                    if ((m_curInd -= 1) < 0) { m_curInd = m_dataPages.Count() - 1; }
                     indUpdate = true;
                 }
                 else if (m_nextBtDown)
                 {
-                    if ((m_curInd += 1) >= m_pages.Count()) { m_curInd = 0; }
+                    if ((m_curInd += 1) >= m_dataPages.Count()) { m_curInd = 0; }
                     indUpdate = true;
                 }
                 else
                 {
                     //page buttons
-                    int toggleIndex = -1;
-                    for (int i = 0; i < m_pageListButtons.Count; i++)
+                    for (int i = 0; i < m_dataPages.Count; i++)
                     {
-                        if (m_pageListButtons[i]) { toggleIndex = i; break; }
-                    }
-                    if (toggleIndex != -1)
-                    {
-                        m_curInd = toggleIndex;
-                        indUpdate = true;
+                        if (m_dataPages[i].m_rowButton)
+                        {
+                            m_curInd = i;
+                            indUpdate = true;
+                            break;
+                        }
                     }
                 }
                 
                 if ( indUpdate )
                 {
-                    ExperimentResultDialogPage curPg = m_pages[m_curInd];
-                    ScienceSubject s = ResearchAndDevelopment.GetSubjectByID(curPg.pageData.subjectID);
+                    DataPage curPg = m_dataPages[m_curInd];
                     
-                    m_dataFieldDataMsg = "Data Size: " + curPg.dataSize.ToString("F1") + " Mits";
-                    m_dataFieldTrnsWarn = curPg.showTransmitWarning ? "Inoperable after Transmitting." : null;
+                    m_dataFieldDataMsg = "Data Size: " + curPg.m_kspPage.dataSize.ToString("F1") + " Mits";
+                    m_dataFieldTrnsWarn = curPg.m_kspPage.showTransmitWarning ? "Inoperable after Transmitting." : null;
 
-                    m_rcvrFieldMsg = "Recovery: +" + curPg.scienceValue.ToString("F1") + " Science";
-                    m_rcvrFieldMainBar = curPg.scienceValue * m_sciHack / s.scienceCap; //shows this experi's value vs max possible
-                    m_rcvrFieldBackBar = 1.0f - s.science / s.scienceCap; //shows this experi's value when done next time vs max possible
+                    m_rcvrFieldMsg = "Recovery: +" + curPg.m_rcvrValue + " Science";
+                    m_rcvrFieldMainBar = curPg.m_rcvrPrcnt;
+                    m_rcvrFieldBackBar = 1.0f - curPg.m_subject.science / curPg.m_subject.scienceCap; //shows this experi's value when done next time vs max possible
 
-                    m_trnsFieldMsg = "Transmit: +" + curPg.transmitValue.ToString("F1") + " Science";
-                    m_trnsFieldMainBar = curPg.transmitValue * m_sciHack / s.scienceCap; //TODOJEFFGIFFEN AAAAUGH why god why
-                    m_trnsFieldBackBar = m_rcvrFieldBackBar * curPg.xmitDataScalar;
+                    m_trnsFieldMsg = "Transmit: +" + curPg.m_trnsValue + " Science";
+                    m_trnsFieldMainBar = curPg.m_trnsPrcnt;
+                    m_trnsFieldBackBar = m_rcvrFieldBackBar * curPg.m_kspPage.xmitDataScalar;
 
                     //if transmit sci is 0pts, then % is 0
-                    m_transBtnPerc = (m_trnsFieldMainBar > 0.1f ? curPg.xmitDataScalar * 100 : 0.0f).ToString("F0") + "%";
+                    m_transBtnPerc = (m_trnsFieldMainBar >= 0.1f ? curPg.m_kspPage.xmitDataScalar * 100 : 0.0f).ToString("F0") + "%";
 
                     //  remaining todo:
                     //  make transmit light blue just be 5 px back off dark blue
