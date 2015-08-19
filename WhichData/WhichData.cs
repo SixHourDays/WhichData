@@ -198,8 +198,8 @@ namespace WhichData
         //default window in 1920x1080 is at 243, 190, 413x240
         //we want to be 428px to the right to compare easily, and 18px taller for our window title)
         public float m_mainDlgHeight = 240 + 18;
-        public Rect m_window = new Rect(243 + 428, 190 - 16, 413, 240 + 18 + 240); //double old height //HACKJEFFGIFFEN
-        public Rect m_myDlg = new Rect(0, 240 + 18, 400 - 4, 240 - 4);
+        public Rect m_window = new Rect(243/* + 428*/, 190 - 16, 913/*413*/, 240 + 18/* + 240*/); //double width//HACKJEFFGIFFEN
+        public Rect m_myDlg = new Rect(0, /*240 + */18, 500 - 4, 240 - 4);
         public int m_windowTitleHeight = 14;
         public int m_padding = 6;
         public int m_titleWidth = 328;
@@ -263,15 +263,39 @@ namespace WhichData
             {
                 int uid = GUIUtility.GetControlID(FocusType.Passive); //get a nice unique window id from system
                 GUI.skin = m_dlgSkin;
-                m_window = GUI.Window(uid, m_window, WindowLayout, "WhichData"); //style
+                m_window = GUI.Window(uid, m_window, WindowLayout, "WhichData", HighLogic.Skin.window); //style
             }
         }
 
         void WindowLayout(int windowID)
         {
             DataPage curPg = m_dataPages[m_curInd];
+
+            GUILayout.BeginArea(m_myDlg/*, HighLogic.Skin.window*/);
+            {
+                /*GUILayout.BeginHorizontal();
+                {
+                //sorter toggles
+//                        toggle0 = GUILayout.Button("Aaaaaa", dlgSkin.GetStyle("keep button"));
+                    toggle1 = GUILayout.Toggle(toggle1, "Bbbbbb", "button");
+                } GUILayout.EndHorizontal();
+*/
+
+                //TODOJEFFGIFFEN toggle bar of sorters now!
+                GUIStyle ngs = new GUIStyle(m_dlgSkin.scrollView); //HACKJEFFGIFFEN
+                ngs.padding = new RectOffset(0, 0, 0, 0); //get rid of stupid left pad
+                m_scrollPos = GUILayout.BeginScrollView(m_scrollPos, ngs);
+                {
+                    for (int i = 0; i < m_dataPages.Count; i++)
+                    {
+                        LayoutListField(i);
+                    }
+                } GUILayout.EndScrollView();
+
+            } GUILayout.EndArea();
+
             //6px border all around.  Then 14px of window title, 6px again below it to sync to orig window top.
-            GUILayout.BeginArea(new Rect(m_padding, m_padding * 2 + m_windowTitleHeight, m_window.width - m_padding * 2, m_mainDlgHeight - m_padding * 2));
+            GUILayout.BeginArea(new Rect(500 - 4 + 16/* + m_padding*/, 0/*m_padding * 2 + m_windowTitleHeight*/, m_window.width - m_padding * 2, m_mainDlgHeight - m_padding * 2)/*, m_dlgSkin.window*/);
             {
                 GUILayout.BeginVertical();
                 {
@@ -315,29 +339,6 @@ namespace WhichData
                     } GUILayout.EndHorizontal();
 
                 } GUILayout.EndVertical();
-            } GUILayout.EndArea();
-
-            GUILayout.BeginArea( m_myDlg );
-            {
-                /*GUILayout.BeginHorizontal();
-                {
-                //sorter toggles
-//                        toggle0 = GUILayout.Button("Aaaaaa", dlgSkin.GetStyle("keep button"));
-                    toggle1 = GUILayout.Toggle(toggle1, "Bbbbbb", "button");
-                } GUILayout.EndHorizontal();
-*/
-            
-                //TODOJEFFGIFFEN toggle bar of sorters now!
-                GUIStyle ngs = new GUIStyle(m_dlgSkin.scrollView); //HACKJEFFGIFFEN
-                ngs.padding = new RectOffset( 0, 0, 0, 0); //get rid of stupid left pad
-                m_scrollPos = GUILayout.BeginScrollView(m_scrollPos, ngs );
-                {
-                    for (int i = 0; i < m_dataPages.Count; i++)
-                    {
-                        LayoutListField(i);
-                    }
-                } GUILayout.EndScrollView();
-
             } GUILayout.EndArea();
 
             //must be last or it disables all the widgets etc
