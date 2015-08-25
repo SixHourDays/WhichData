@@ -94,6 +94,19 @@ namespace WhichData
         }
     }
 
+    public struct SortField
+    {
+        public string m_text;
+        public bool m_guiToggle;
+        public bool m_enabled;
+        public SortField( string title )
+        { 
+            m_text = title;
+            m_guiToggle = false;
+            m_enabled = true;
+        }
+    }
+
     [KSPAddon(KSPAddon.Startup.Flight, false)] //simple enough we can just exist in flight, new instance / scene
     public class WhichData : MonoBehaviour
     {
@@ -235,10 +248,6 @@ namespace WhichData
         //GUI state
         public bool m_prevBtDown = false;
         public bool m_nextBtDown = false;
-
-        //
-        //public bool m_discardBtDown = false;
-        //
         public Vector2 m_scrollPos;
         public Texture2D m_dataIcon = null;
         public Texture2D m_scienceIcon = null;
@@ -251,11 +260,21 @@ namespace WhichData
         public float m_trnsFieldMainBar;
         public float m_trnsFieldBackBar;
         public string m_transBtnPerc;
-        
+        public List<SortField> m_sortFields = new List<SortField>
+        {
+            new SortField("Part"),
+            new SortField("Recover Sci"), 
+            new SortField("Transm. Sci"),
+            new SortField("Mits"),
+            new SortField("Biome"),
+            new SortField("Situation"),
+            new SortField("Celes. Body")
+        };
 
         //mod state
         public int m_curInd;
         public List<DataPage> m_dataPages = new List<DataPage>();
+        public List<int> m_sortRanks = new List<int>();
 
         void OnGUI()
         {
@@ -273,15 +292,18 @@ namespace WhichData
 
             GUILayout.BeginArea(m_myDlg/*, HighLogic.Skin.window*/);
             {
-                /*GUILayout.BeginHorizontal();
+                GUILayout.BeginHorizontal();
                 {
-                //sorter toggles
-//                        toggle0 = GUILayout.Button("Aaaaaa", dlgSkin.GetStyle("keep button"));
-                    toggle1 = GUILayout.Toggle(toggle1, "Bbbbbb", "button");
+                    //sorter toggles
+                    for ( int i = 0; i < m_sortFields.Count; i++ )
+                    {
+                        SortField sf = m_sortFields[i];
+                        sf.m_guiToggle = GUILayout.Toggle(sf.m_guiToggle, sf.m_text, HighLogic.Skin.button); //want a ksp button not the fat rslt dlg button
+                        m_sortFields[i] = sf;
+                    }
                 } GUILayout.EndHorizontal();
-*/
 
-                //TODOJEFFGIFFEN toggle bar of sorters now!
+
                 GUIStyle ngs = new GUIStyle(m_dlgSkin.scrollView); //HACKJEFFGIFFEN
                 ngs.padding = new RectOffset(0, 0, 0, 0); //get rid of stupid left pad
                 m_scrollPos = GUILayout.BeginScrollView(m_scrollPos, ngs);
@@ -575,6 +597,44 @@ namespace WhichData
 
             //TODOJEFFGIFFEN hide on empty
             {
+                //sort toggle logic
+                //notion of sorting fwd/back seems nice, but unclear / annoying in practice
+                //cycling a chain of toggles means both nuisance in setup, accidents on the tail, and desire to insert midway, which we cant.
+                //so simple, fwd only chain of sort criteria.  They will embrace the simplicity.
+                {
+                    for (int i = 0; i < m_sortFields.Count; i++)
+                    {
+                        SortField sf = m_sortFields[i];
+                        if (sf.m_guiToggle == sf.m_enabled) //toggle state changed from logic
+                        {
+                            if (sf.m_enabled) //toggle off->on
+                            {
+                                m_sortRanks.Add(i);
+                                sf.m_enabled = false;
+                                sf.m_text = sf.m_text.Insert(0, m_sortRanks.Count.ToString() + "^"); //HACKJEFFGIFFEN shitty arrow
+                            }
+                            else
+                            {
+                                //can only untoggle most recent
+                                if (m_sortRanks.Count > 0 && i == m_sortRanks.Last())
+                                {
+                                    m_sortRanks.RemoveAt(m_sortRanks.Count - 1);
+                                    sf.m_enabled = true;
+                                    sf.m_text = sf.m_text.Remove(0, 2);
+                                }
+                                else //otherwise force toggle to stay on
+                                {
+                                    sf.m_guiToggle = true;
+                                }
+                            }
+                        }
+
+                        m_sortFields[i] = sf;
+                    }
+                }
+                //TODOJEFFGIFFEN now observe the sort rank in the result lists!
+                //TODOJEFFGIFFEN possibly use GUIStyle down state clone to highlight selected list row
+
                 //prev next buttons
                 if (m_prevBtDown)
                 {
@@ -599,11 +659,11 @@ namespace WhichData
                         }
                     }
                 }
-                
-                if ( indUpdate )
+
+                if (indUpdate)
                 {
                     DataPage curPg = m_dataPages[m_curInd];
-                    
+
                     m_dataFieldDataMsg = "Data Size: " + curPg.m_kspPage.dataSize.ToString("F1") + " Mits";
                     m_dataFieldTrnsWarn = curPg.m_kspPage.showTransmitWarning ? "Inoperable after Transmitting." : null;
 
