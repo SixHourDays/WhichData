@@ -94,7 +94,7 @@ namespace WhichData
         }
     }
 
-    public struct SortField
+    public class SortField
     {
         public string m_text;
         public bool m_guiToggle;
@@ -299,7 +299,6 @@ namespace WhichData
                     {
                         SortField sf = m_sortFields[i];
                         sf.m_guiToggle = GUILayout.Toggle(sf.m_guiToggle, sf.m_text, HighLogic.Skin.button); //want a ksp button not the fat rslt dlg button
-                        m_sortFields[i] = sf;
                     }
                 } GUILayout.EndHorizontal();
 
@@ -597,11 +596,12 @@ namespace WhichData
 
             //TODOJEFFGIFFEN hide on empty
             {
-                //sort toggle logic
-                //notion of sorting fwd/back seems nice, but unclear / annoying in practice
-                //cycling a chain of toggles means both nuisance in setup, accidents on the tail, and desire to insert midway, which we cant.
-                //so simple, fwd only chain of sort criteria.  They will embrace the simplicity.
+                //list field sorting
                 {
+                    //toggle chain logic
+                    //notion of sorting fwd/back seems nice, but unclear / annoying in practice
+                    //cycling a chain of toggles means both nuisance in setup, accidents on the tail, and desire to insert midway, which we cant.
+                    //so simple, fwd only chain of sort criteria.  They will embrace the simplicity.
                     for (int i = 0; i < m_sortFields.Count; i++)
                     {
                         SortField sf = m_sortFields[i];
@@ -628,12 +628,12 @@ namespace WhichData
                                 }
                             }
                         }
-
-                        m_sortFields[i] = sf;
                     }
+
+                    //actual sort based on toggle ranks
+                    //TODOJEFFGIFFEN now observe the sort rank in the result lists!
+                    //TODOJEFFGIFFEN possibly use GUIStyle down state clone to highlight selected list row
                 }
-                //TODOJEFFGIFFEN now observe the sort rank in the result lists!
-                //TODOJEFFGIFFEN possibly use GUIStyle down state clone to highlight selected list row
 
                 //prev next buttons
                 if (m_prevBtDown)
