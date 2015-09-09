@@ -311,7 +311,7 @@ namespace WhichData
             new SortField("Transm. Sci", DataPage.CmpTrnsSci ),
             new SortField("Mits", DataPage.CmpMits ),
             new SortField("Biome", DataPage.CmpBiome ),
-            new SortField("Situation", DataPage.CmpBiome ),
+            new SortField("Situation", DataPage.CmpSitu ),
             new SortField("Celes. Body", DataPage.CmpBody )
         };
 
