@@ -21,11 +21,20 @@ namespace WhichData
         public string m_biome;
 
         //hud state
-        public bool m_rowButton;
-        public float m_rcvrPrcnt;
-        public float m_trnsPrcnt;
+        public bool m_rowButton = false;
+
+        //hud display (truncated values, formatted strings etc)
+        public string m_dataFieldDataMsg;
+        public string m_dataFieldTrnsWarn;
         public string m_rcvrValue; //1 decimal accuracy
-        public string m_trnsValue; //..
+        public float m_rcvrPrcnt;
+        public string m_rcvrFieldMsg;
+        public float m_rcvrFieldBackBar;
+        public string m_trnsValue; //1 decimal accuracy
+        public float m_trnsPrcnt;
+        public string m_trnsFieldMsg;
+        public float m_trnsFieldBackBar;
+        public string m_transBtnPerc; //0% when sci is 0 pts, and integer % otherwise
 
         //hacks 1
         public float m_sciHack = 0.5f;
@@ -35,12 +44,20 @@ namespace WhichData
             m_kspPage = page;
             m_subject = ResearchAndDevelopment.GetSubjectByID(m_kspPage.pageData.subjectID);
 
-            m_rowButton = false;
+            //compose data used in row display
             m_rcvrPrcnt = m_kspPage.scienceValue * m_sciHack / m_subject.scienceCap; //shows this experi's value vs max possible
             m_trnsPrcnt = m_kspPage.transmitValue * m_sciHack / m_subject.scienceCap; //TODOJEFFGIFFEN AAAAUGH why god why (always too low)
-
             m_rcvrValue = m_kspPage.scienceValue.ToString("F1");
             m_trnsValue = m_kspPage.transmitValue.ToString("F1");
+
+            //compose data used in info pane (classic dialog fields)
+            m_dataFieldDataMsg = "Data Size: " + m_kspPage.dataSize.ToString("F1") + " Mits";
+            m_dataFieldTrnsWarn = m_kspPage.showTransmitWarning ? "Inoperable after Transmitting." : null;
+            m_rcvrFieldMsg = "Recovery: +" + m_rcvrValue + " Science";
+            m_rcvrFieldBackBar = 1.0f - m_subject.science / m_subject.scienceCap; //shows this experi's value when done next time vs max possible
+            m_trnsFieldMsg = "Transmit: +" + m_trnsValue + " Science";
+            m_trnsFieldBackBar = m_rcvrFieldBackBar * m_kspPage.xmitDataScalar;
+            m_transBtnPerc = (m_trnsPrcnt >= 0.1f ? m_kspPage.xmitDataScalar * 100 : 0.0f).ToString("F0") + "%"; //if transmit sci is 0pts, then % is 0
 
             //parse out subjectIDs of the form (we ditch the @):
             //  crewReport@KerbinSrfLandedLaunchPad
@@ -251,15 +268,7 @@ namespace WhichData
         public Vector2 m_scrollPos;
         public Texture2D m_dataIcon = null;
         public Texture2D m_scienceIcon = null;
-        public string m_dataFieldDataMsg;
-        public string m_dataFieldTrnsWarn;
-        public string m_rcvrFieldMsg;
-        public float m_rcvrFieldMainBar;
-        public float m_rcvrFieldBackBar;
-        public string m_trnsFieldMsg;
-        public float m_trnsFieldMainBar;
-        public float m_trnsFieldBackBar;
-        public string m_transBtnPerc;
+    
         public List<SortField> m_sortFields = new List<SortField>
         {
             new SortField("Part"),
@@ -272,7 +281,7 @@ namespace WhichData
         };
 
         //mod state
-        public int m_curInd;
+        public int m_curInd = 0;
         public List<DataPage> m_dataPages = new List<DataPage>();
         public List<int> m_sortRanks = new List<int>();
 
@@ -288,6 +297,10 @@ namespace WhichData
 
         void WindowLayout(int windowID)
         {
+            //  TODOJEFFGIFFEN
+            //  make transmit light blue just be 5 px back off dark blue
+            //  align the top of button with field
+            //  figure out how to make a ConverterResults field clickable / highlight and shit
             DataPage curPg = m_dataPages[m_curInd];
 
             GUILayout.BeginArea(m_myDlg/*, HighLogic.Skin.window*/);
@@ -338,9 +351,9 @@ namespace WhichData
                             //the skin's box GUIStyle already has the green text and nice top left align
                             GUILayout.Box(curPg.m_kspPage.resultText, GUILayout.Height(m_resultTextBoxHeight));
 
-                            LayoutResultField(m_dataFieldDataMsg, m_dataFieldTrnsWarn);
-                            LayoutResultField(m_rcvrFieldMsg, true, m_rcvrFieldMainBar, m_rcvrFieldBackBar);
-                            LayoutResultField(m_trnsFieldMsg, false, m_trnsFieldMainBar, m_trnsFieldBackBar);
+                            LayoutInfoField( curPg );
+                            LayoutRecoverScienceBarField(curPg );
+                            LayoutTransmitScienceBarField( curPg );
 
                         } GUILayout.EndVertical();
 
@@ -354,7 +367,7 @@ namespace WhichData
                             GUILayout.Button(new GUIContent("", "Keep Data"), m_styleKeepButton);
                             //GUI.tooltip = "Transmit Data";
 
-                            GUILayout.Button(m_transBtnPerc, m_styleTransmitButton);
+                            GUILayout.Button( curPg.m_transBtnPerc, m_styleTransmitButton );
                         } GUILayout.EndVertical();
 
                     } GUILayout.EndHorizontal();
@@ -366,13 +379,13 @@ namespace WhichData
             GUI.DragWindow();
         }
 
-        public void LayoutResultField(string text, string warning = null)
+        public void LayoutInfoField(DataPage page)
         {
             GUILayout.BeginHorizontal(m_styleRfBackground);
             {
                 GUILayout.Label( m_dataIcon, m_styleRfIcons );
-                GUILayout.Label( text, m_styleRfText );
-                if (warning != null)
+                GUILayout.Label( page.m_dataFieldDataMsg, m_styleRfText );
+                if (page.m_dataFieldTrnsWarn != null)
                 {
                     Rect textRect = GUILayoutUtility.GetLastRect();
                     TextAnchor oldAnchor = m_styleRfText.alignment;
@@ -381,7 +394,7 @@ namespace WhichData
                     Rect totalField = new Rect(m_leftColumnWidth - m_progressBarWidth - m_barToEndPad, textRect.yMin, m_progressBarWidth, textRect.height);
                     m_styleRfText.alignment = TextAnchor.MiddleRight;
                     GUI.color = m_inopWarnOrange;
-                    GUI.Label( totalField, warning, m_styleRfText);
+                    GUI.Label( totalField, page.m_dataFieldTrnsWarn, m_styleRfText);
 
                     GUI.color = oldColor;
                     m_styleRfText.alignment = oldAnchor;
@@ -390,7 +403,19 @@ namespace WhichData
             } GUILayout.EndHorizontal();
         }
 
-        public void LayoutResultField(string text, bool greenFill, float lightFillPercent, float darkFillPercent )
+        public void LayoutRecoverScienceBarField( DataPage page )
+        {
+            //selecting the recover science strings & styles
+            LayoutScienceBarField( page.m_rcvrFieldMsg, page.m_rcvrPrcnt, page.m_rcvrFieldBackBar, m_stylePrgBarDarkGreen, m_stylePrgBarLightGreen );
+        }
+
+        public void LayoutTransmitScienceBarField( DataPage page )
+        {
+            //selecting the transmit science strings & styles
+            LayoutScienceBarField( page.m_trnsFieldMsg, page.m_trnsPrcnt, page.m_trnsFieldBackBar, m_stylePrgBarDarkBlue, m_stylePrgBarLightBlue );
+        }
+
+        public void LayoutScienceBarField( string text, float lightFillPrcnt, float darkFillPrcnt, GUIStyle darkBarStyle, GUIStyle lightBarStyle )
         {
              //info bars white text
             GUIContent nothing = new GUIContent();
@@ -398,7 +423,7 @@ namespace WhichData
             GUILayout.BeginHorizontal(m_styleRfBackground);
             {
                 GUILayout.Label( m_scienceIcon, m_styleRfIcons );
-                GUILayout.Label( text, m_styleRfText );
+                GUILayout.Label( text, m_styleRfText);
 
                 Rect textRect = GUILayoutUtility.GetLastRect();
                 Rect totalBar = new Rect( m_leftColumnWidth - m_progressBarWidth - m_barToEndPad, textRect.yMin, m_progressBarWidth, textRect.height );
@@ -406,16 +431,16 @@ namespace WhichData
 
                 //the bars need 7/130 or more to draw right (pad for the caps)
                 //if the light bar is invisible, the dark bar has no point.
-                float lightFillPx = lightFillPercent * m_progressBarWidth;
+                float lightFillPx = lightFillPrcnt * m_progressBarWidth;
                 if (lightFillPx >= m_barMinPx)
                 {
                     Rect darkBar = new Rect(totalBar);
-                    darkBar.width *= darkFillPercent;
-                    GUI.Box(darkBar, nothing, greenFill ? m_stylePrgBarDarkGreen : m_stylePrgBarDarkBlue);
+                    darkBar.width *= darkFillPrcnt;
+                    GUI.Box(darkBar, nothing, darkBarStyle);
 
                     Rect lightBar = new Rect(totalBar);
                     lightBar.width = lightFillPx;
-                    GUI.Box(lightBar, nothing, greenFill ? m_stylePrgBarLightGreen : m_stylePrgBarLightBlue);
+                    GUI.Box(lightBar, nothing, lightBarStyle);
                 }
 
             } GUILayout.EndHorizontal();
@@ -563,8 +588,6 @@ namespace WhichData
 
         public void Update()
         {
-            bool indUpdate = false;
-
             //when dialog is spawned, steal its data and kill it
             if (ExperimentsResultDialog.Instance != null)
             {
@@ -581,8 +604,7 @@ namespace WhichData
                 //autoselect entry 0 on first page copied in
                 if (m_dataPages.Count == 0)
                 {
-                    m_curInd = 0;
-                    indUpdate = true;
+                    //TODOJEFFGIFFEN autohighlight list entry 0
                 }
                 
                 foreach (ExperimentResultDialogPage resultPage in ExperimentsResultDialog.Instance.pages)
@@ -616,7 +638,7 @@ namespace WhichData
                             else
                             {
                                 //can only untoggle most recent
-                                if (m_sortRanks.Count > 0 && i == m_sortRanks.Last())
+                                if (i == m_sortRanks.Last())
                                 {
                                     m_sortRanks.RemoveAt(m_sortRanks.Count - 1);
                                     sf.m_enabled = true;
@@ -639,12 +661,10 @@ namespace WhichData
                 if (m_prevBtDown)
                 {
                     if ((m_curInd -= 1) < 0) { m_curInd = m_dataPages.Count() - 1; }
-                    indUpdate = true;
                 }
                 else if (m_nextBtDown)
                 {
                     if ((m_curInd += 1) >= m_dataPages.Count()) { m_curInd = 0; }
-                    indUpdate = true;
                 }
                 else
                 {
@@ -654,34 +674,9 @@ namespace WhichData
                         if (m_dataPages[i].m_rowButton)
                         {
                             m_curInd = i;
-                            indUpdate = true;
                             break;
                         }
                     }
-                }
-
-                if (indUpdate)
-                {
-                    DataPage curPg = m_dataPages[m_curInd];
-
-                    m_dataFieldDataMsg = "Data Size: " + curPg.m_kspPage.dataSize.ToString("F1") + " Mits";
-                    m_dataFieldTrnsWarn = curPg.m_kspPage.showTransmitWarning ? "Inoperable after Transmitting." : null;
-
-                    m_rcvrFieldMsg = "Recovery: +" + curPg.m_rcvrValue + " Science";
-                    m_rcvrFieldMainBar = curPg.m_rcvrPrcnt;
-                    m_rcvrFieldBackBar = 1.0f - curPg.m_subject.science / curPg.m_subject.scienceCap; //shows this experi's value when done next time vs max possible
-
-                    m_trnsFieldMsg = "Transmit: +" + curPg.m_trnsValue + " Science";
-                    m_trnsFieldMainBar = curPg.m_trnsPrcnt;
-                    m_trnsFieldBackBar = m_rcvrFieldBackBar * curPg.m_kspPage.xmitDataScalar;
-
-                    //if transmit sci is 0pts, then % is 0
-                    m_transBtnPerc = (m_trnsFieldMainBar >= 0.1f ? curPg.m_kspPage.xmitDataScalar * 100 : 0.0f).ToString("F0") + "%";
-
-                    //  remaining todo:
-                    //  make transmit light blue just be 5 px back off dark blue
-                    //  align the top of button with field
-                    //  figure out how to make a ConverterResults field clickable / highlight and shit
                 }
             }
             /*Debug.Log("GA dataSize " + curPg.dataSize);
