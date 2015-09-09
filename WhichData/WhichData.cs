@@ -13,7 +13,7 @@ namespace WhichData
         //ksp data
         public ExperimentResultDialogPage m_kspPage;
         public ScienceSubject m_subject;
-        
+
         //subjectID parsed
         public string m_experi;
         public string m_body;
@@ -109,6 +109,19 @@ namespace WhichData
                 m_biome = subject;                                                      //LaunchPad
             }
         }
+
+        private static int CmpStr(String a, String b) { return String.Compare(a, b); }
+        private static int CmpFlt(float a, float b) { return a < b ? -1 : a == b ? 0 : 1; }
+        
+        //Comparators for delegation
+        public delegate int SortDlgt(DataPage x, DataPage y);
+        public static int CmpPart(DataPage x, DataPage y) { return CmpStr(x.m_experi, y.m_experi); }
+        public static int CmpRcvrSci(DataPage x, DataPage y) { return CmpFlt(x.m_kspPage.scienceValue, y.m_kspPage.scienceValue); }
+        public static int CmpTrnsSci(DataPage x, DataPage y) { return CmpFlt(x.m_kspPage.transmitValue, y.m_kspPage.transmitValue); }
+        public static int CmpMits(DataPage x, DataPage y) { return CmpFlt(x.m_kspPage.dataSize, y.m_kspPage.dataSize); }
+        public static int CmpBiome(DataPage x, DataPage y) { return CmpStr(x.m_biome, y.m_biome); }
+        public static int CmpSitu(DataPage x, DataPage y) { return CmpStr(x.m_situ, y.m_situ); }
+        public static int CmpBody(DataPage x, DataPage y) { return CmpStr(x.m_body, y.m_body); }
     }
 
     public class SortField
@@ -116,11 +129,33 @@ namespace WhichData
         public string m_text;
         public bool m_guiToggle;
         public bool m_enabled;
-        public SortField( string title )
+        public DataPage.SortDlgt m_sortDlgt;
+
+        public SortField( string title, DataPage.SortDlgt sortDlgt )
         { 
             m_text = title;
-            m_guiToggle = false;
-            m_enabled = true;
+            m_sortDlgt = sortDlgt;
+
+            m_guiToggle = false; //actual HUD toggle
+            m_enabled = true; //toggle locking via ranks
+        }
+    }
+
+    public class RankedSorter : IComparer<DataPage>
+    {
+        public List<SortField> m_sortedFields = new List<SortField>(); //ranked SortFields to sort on
+
+        public int Compare(DataPage x, DataPage y)
+        {
+            // -1 < , 0 == , 1 >
+            foreach (SortField sf in m_sortedFields)
+            {
+                int result = sf.m_sortDlgt(x, y);
+                if (result != 0) { return result; }
+            }
+
+            //if all criteria returned equal, let order of list remain
+            return 0;
         }
     }
 
@@ -271,13 +306,13 @@ namespace WhichData
     
         public List<SortField> m_sortFields = new List<SortField>
         {
-            new SortField("Part"),
-            new SortField("Recover Sci"), 
-            new SortField("Transm. Sci"),
-            new SortField("Mits"),
-            new SortField("Biome"),
-            new SortField("Situation"),
-            new SortField("Celes. Body")
+            new SortField("Part", DataPage.CmpPart ),
+            new SortField("Recover Sci", DataPage.CmpRcvrSci ), 
+            new SortField("Transm. Sci", DataPage.CmpTrnsSci ),
+            new SortField("Mits", DataPage.CmpMits ),
+            new SortField("Biome", DataPage.CmpBiome ),
+            new SortField("Situation", DataPage.CmpBiome ),
+            new SortField("Celes. Body", DataPage.CmpBody )
         };
 
         //mod state
@@ -620,6 +655,7 @@ namespace WhichData
             {
                 //list field sorting
                 {
+                    bool dirtyList = false;
                     //toggle chain logic
                     //notion of sorting fwd/back seems nice, but unclear / annoying in practice
                     //cycling a chain of toggles means both nuisance in setup, accidents on the tail, and desire to insert midway, which we cant.
@@ -631,18 +667,20 @@ namespace WhichData
                         {
                             if (sf.m_enabled) //toggle off->on
                             {
-                                m_sortRanks.Add(i);
+                                m_sortRanks.Add(i); //TODOJEFFGIFFEN switch this to just keeping the RankedSorter created always
                                 sf.m_enabled = false;
                                 sf.m_text = sf.m_text.Insert(0, m_sortRanks.Count.ToString() + "^"); //HACKJEFFGIFFEN shitty arrow
+                                dirtyList = true;
                             }
                             else
                             {
                                 //can only untoggle most recent
                                 if (i == m_sortRanks.Last())
                                 {
-                                    m_sortRanks.RemoveAt(m_sortRanks.Count - 1);
+                                    m_sortRanks.RemoveAt(m_sortRanks.Count - 1);  //TODOJEFFGIFFEN switch this to just keeping the RankedSorter created always
                                     sf.m_enabled = true;
                                     sf.m_text = sf.m_text.Remove(0, 2);
+                                    dirtyList = true;
                                 }
                                 else //otherwise force toggle to stay on
                                 {
@@ -652,8 +690,19 @@ namespace WhichData
                         }
                     }
 
-                    //actual sort based on toggle ranks
-                    //TODOJEFFGIFFEN now observe the sort rank in the result lists!
+                    if (dirtyList)
+                    {
+                        //actual sort based on toggle ranks
+                        RankedSorter rankedSorter = new RankedSorter();
+                        foreach (int sortIndex in m_sortRanks)
+                        {
+                            rankedSorter.m_sortedFields.Add(m_sortFields[sortIndex]);
+                        }
+                        //ok to sort on no criteria
+                        m_dataPages.Sort(rankedSorter);
+                        m_curInd = 0; //HACKJEFFGIFFEN should switch to pointing to it instead of an index
+                    }
+
                     //TODOJEFFGIFFEN possibly use GUIStyle down state clone to highlight selected list row
                 }
 
