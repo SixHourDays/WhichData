@@ -143,7 +143,11 @@ namespace WhichData
 
     public class RankedSorter : IComparer<DataPage>
     {
-        public List<SortField> m_sortedFields = new List<SortField>(); //ranked SortFields to sort on
+        private List<SortField> m_sortedFields = new List<SortField>(); //ranked SortFields to sort on
+        public SortField GetLastSortField() { return m_sortedFields.Last(); }
+        public int GetTotalRanks() { return m_sortedFields.Count; }
+        public void AddSortField(SortField sf) { m_sortedFields.Add(sf); }
+        public void RemoveLastSortField() { m_sortedFields.RemoveAt(m_sortedFields.Count - 1); }
 
         public int Compare(DataPage x, DataPage y)
         {
@@ -304,6 +308,7 @@ namespace WhichData
         public Texture2D m_dataIcon = null;
         public Texture2D m_scienceIcon = null;
     
+        //mod state
         public List<SortField> m_sortFields = new List<SortField>
         {
             new SortField("Part", DataPage.CmpPart ),
@@ -314,11 +319,10 @@ namespace WhichData
             new SortField("Situation", DataPage.CmpSitu ),
             new SortField("Celes. Body", DataPage.CmpBody )
         };
-
-        //mod state
         public int m_curInd = 0;
+        public bool m_dirtyPages = false;
         public List<DataPage> m_dataPages = new List<DataPage>();
-        public List<int> m_sortRanks = new List<int>();
+        public RankedSorter m_rankSorter = new RankedSorter();
 
         void OnGUI()
         {
@@ -646,6 +650,7 @@ namespace WhichData
                 {
                     m_dataPages.Add(new DataPage(resultPage));
                 }
+                m_dirtyPages = true; //new pages means we need to resort
 
                 ExperimentsResultDialog.Instance.pages.Clear();
                 Destroy(ExperimentsResultDialog.Instance.gameObject); //1 frame up still...ehh
@@ -655,32 +660,30 @@ namespace WhichData
             {
                 //list field sorting
                 {
-                    bool dirtyList = false;
                     //toggle chain logic
                     //notion of sorting fwd/back seems nice, but unclear / annoying in practice
                     //cycling a chain of toggles means both nuisance in setup, accidents on the tail, and desire to insert midway, which we cant.
                     //so simple, fwd only chain of sort criteria.  They will embrace the simplicity.
-                    for (int i = 0; i < m_sortFields.Count; i++)
+                    foreach (SortField sf in m_sortFields)
                     {
-                        SortField sf = m_sortFields[i];
                         if (sf.m_guiToggle == sf.m_enabled) //toggle state changed from logic
                         {
                             if (sf.m_enabled) //toggle off->on
                             {
-                                m_sortRanks.Add(i); //TODOJEFFGIFFEN switch this to just keeping the RankedSorter created always
+                                m_rankSorter.AddSortField( sf );
                                 sf.m_enabled = false;
-                                sf.m_text = sf.m_text.Insert(0, m_sortRanks.Count.ToString() + "^"); //HACKJEFFGIFFEN shitty arrow
-                                dirtyList = true;
+                                sf.m_text = sf.m_text.Insert(0, m_rankSorter.GetTotalRanks().ToString() + "^"); //HACKJEFFGIFFEN shitty arrow
+                                m_dirtyPages = true;
                             }
                             else
                             {
                                 //can only untoggle most recent
-                                if (i == m_sortRanks.Last())
+                                if (sf.Equals( m_rankSorter.GetLastSortField() ) )
                                 {
-                                    m_sortRanks.RemoveAt(m_sortRanks.Count - 1);  //TODOJEFFGIFFEN switch this to just keeping the RankedSorter created always
+                                    m_rankSorter.RemoveLastSortField();
                                     sf.m_enabled = true;
                                     sf.m_text = sf.m_text.Remove(0, 2);
-                                    dirtyList = true;
+                                    m_dirtyPages = true;
                                 }
                                 else //otherwise force toggle to stay on
                                 {
@@ -690,16 +693,12 @@ namespace WhichData
                         }
                     }
 
-                    if (dirtyList)
+                    if (m_dirtyPages)
                     {
                         //actual sort based on toggle ranks
-                        RankedSorter rankedSorter = new RankedSorter();
-                        foreach (int sortIndex in m_sortRanks)
-                        {
-                            rankedSorter.m_sortedFields.Add(m_sortFields[sortIndex]);
-                        }
                         //ok to sort on no criteria
-                        m_dataPages.Sort(rankedSorter);
+                        m_dataPages.Sort( m_rankSorter );
+                        m_dirtyPages = false;
                         m_curInd = 0; //HACKJEFFGIFFEN should switch to pointing to it instead of an index
                     }
 
