@@ -319,7 +319,7 @@ namespace WhichData
             new SortField("Situation", DataPage.CmpSitu ),
             new SortField("Celes. Body", DataPage.CmpBody )
         };
-        public int m_curInd = 0;
+        public DataPage m_curPg = null;
         public bool m_dirtyPages = false;
         public List<DataPage> m_dataPages = new List<DataPage>();
         public RankedSorter m_rankSorter = new RankedSorter();
@@ -340,7 +340,6 @@ namespace WhichData
             //  make transmit light blue just be 5 px back off dark blue
             //  align the top of button with field
             //  figure out how to make a ConverterResults field clickable / highlight and shit
-            DataPage curPg = m_dataPages[m_curInd];
 
             GUILayout.BeginArea(m_myDlg/*, HighLogic.Skin.window*/);
             {
@@ -376,7 +375,7 @@ namespace WhichData
                     GUILayout.BeginHorizontal();
                     {
                         m_prevBtDown = GUILayout.Button("", m_stylePrevPage, GUILayout.Width(m_pageButtonSize), GUILayout.Height(m_pageButtonSize + m_pageButtonPadding));
-                        GUILayout.Label(curPg.m_kspPage.title, GUILayout.Width(m_titleWidth));
+                        GUILayout.Label(m_curPg.m_kspPage.title, GUILayout.Width(m_titleWidth));
                         m_nextBtDown = GUILayout.Button("", m_styleNextPage, GUILayout.Width(m_pageButtonSize), GUILayout.Height(m_pageButtonSize + m_pageButtonPadding));
                     } GUILayout.EndHorizontal();
 
@@ -388,11 +387,11 @@ namespace WhichData
                         GUILayout.BeginVertical(GUILayout.Width(m_leftColumnWidth)); //width of left column from orig dialog
                         {
                             //the skin's box GUIStyle already has the green text and nice top left align
-                            GUILayout.Box(curPg.m_kspPage.resultText, GUILayout.Height(m_resultTextBoxHeight));
+                            GUILayout.Box(m_curPg.m_kspPage.resultText, GUILayout.Height(m_resultTextBoxHeight));
 
-                            LayoutInfoField( curPg );
-                            LayoutRecoverScienceBarField(curPg );
-                            LayoutTransmitScienceBarField( curPg );
+                            LayoutInfoField( m_curPg );
+                            LayoutRecoverScienceBarField( m_curPg );
+                            LayoutTransmitScienceBarField( m_curPg );
 
                         } GUILayout.EndVertical();
 
@@ -406,7 +405,7 @@ namespace WhichData
                             GUILayout.Button(new GUIContent("", "Keep Data"), m_styleKeepButton);
                             //GUI.tooltip = "Transmit Data";
 
-                            GUILayout.Button( curPg.m_transBtnPerc, m_styleTransmitButton );
+                            GUILayout.Button( m_curPg.m_transBtnPerc, m_styleTransmitButton );
                         } GUILayout.EndVertical();
 
                     } GUILayout.EndHorizontal();
@@ -640,23 +639,20 @@ namespace WhichData
                 }
                  */
 
-                //autoselect entry 0 on first page copied in
-                if (m_dataPages.Count == 0)
-                {
-                    //TODOJEFFGIFFEN autohighlight list entry 0
-                }
-                
                 foreach (ExperimentResultDialogPage resultPage in ExperimentsResultDialog.Instance.pages)
                 {
                     m_dataPages.Add(new DataPage(resultPage));
                 }
                 m_dirtyPages = true; //new pages means we need to resort
+                
+                //if we've never picked a page, default
+                if (m_curPg == null) { m_curPg = m_dataPages[0]; }
 
                 ExperimentsResultDialog.Instance.pages.Clear();
                 Destroy(ExperimentsResultDialog.Instance.gameObject); //1 frame up still...ehh
             }
 
-            //TODOJEFFGIFFEN hide on empty
+            if (m_dataPages.Count > 0)
             {
                 //list field sorting
                 {
@@ -699,29 +695,32 @@ namespace WhichData
                         //ok to sort on no criteria
                         m_dataPages.Sort( m_rankSorter );
                         m_dirtyPages = false;
-                        m_curInd = 0; //HACKJEFFGIFFEN should switch to pointing to it instead of an index
                     }
 
                     //TODOJEFFGIFFEN possibly use GUIStyle down state clone to highlight selected list row
                 }
 
                 //prev next buttons
-                if (m_prevBtDown)
+                if (m_prevBtDown || m_nextBtDown)
                 {
-                    if ((m_curInd -= 1) < 0) { m_curInd = m_dataPages.Count() - 1; }
-                }
-                else if (m_nextBtDown)
-                {
-                    if ((m_curInd += 1) >= m_dataPages.Count()) { m_curInd = 0; }
+                    int pageIndex = m_dataPages.IndexOf(m_curPg);
+                    if (m_prevBtDown) { pageIndex -= 1; }
+                    if (m_nextBtDown) { pageIndex += 1; }
+
+                    //mod on size, guard against negative
+                    pageIndex %= m_dataPages.Count();
+                    if ( pageIndex < 0 ) { pageIndex += m_dataPages.Count(); }
+
+                    m_curPg = m_dataPages[pageIndex];
                 }
                 else
                 {
                     //page buttons
-                    for (int i = 0; i < m_dataPages.Count; i++)
+                    foreach (DataPage page in m_dataPages)
                     {
-                        if (m_dataPages[i].m_rowButton)
+                        if (page.m_rowButton)
                         {
-                            m_curInd = i;
+                            m_curPg = page;
                             break;
                         }
                     }
