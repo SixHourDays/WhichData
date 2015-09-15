@@ -22,6 +22,7 @@ namespace WhichData
 
         //hud state
         public bool m_rowButton = false;
+        public bool m_selected = false;
 
         //hud display (truncated values, formatted strings etc)
         public string m_dataFieldDataMsg;
@@ -276,7 +277,7 @@ namespace WhichData
         public int m_resultTextBoxHeight = 110;
         public int m_barToEndPad = 2;
         public Color m_inopWarnOrange = new Color(1.0f, 0.63f, 0.0f); //orangey gold
-        public int m_listFieldMaxHeight = 18; //height of each list row
+        public int m_listFieldMaxHeight = 22;  //height of each list row. min be 18, helps with click probability some
         
         //state from ksp
         public GUIStyle m_stylePrevPage;
@@ -307,6 +308,7 @@ namespace WhichData
         public Vector2 m_scrollPos;
         public Texture2D m_dataIcon = null;
         public Texture2D m_scienceIcon = null;
+        public Texture2D m_closeIcon = null;
     
         //mod state
         public List<SortField> m_sortFields = new List<SortField>
@@ -319,7 +321,7 @@ namespace WhichData
             new SortField("Situation", DataPage.CmpSitu ),
             new SortField("Celes. Body", DataPage.CmpBody )
         };
-        public DataPage m_curPg = null;
+        public List<DataPage> m_selectedPages = new List<DataPage>();
         public bool m_dirtyPages = false;
         public List<DataPage> m_dataPages = new List<DataPage>();
         public RankedSorter m_rankSorter = new RankedSorter();
@@ -358,9 +360,9 @@ namespace WhichData
                 ngs.padding = new RectOffset(0, 0, 0, 0); //get rid of stupid left pad
                 m_scrollPos = GUILayout.BeginScrollView(m_scrollPos, ngs);
                 {
-                    for (int i = 0; i < m_dataPages.Count; i++)
+                    foreach (DataPage page in m_dataPages)
                     {
-                        LayoutListField(i);
+                        LayoutListField(page);
                     }
                 } GUILayout.EndScrollView();
 
@@ -369,48 +371,98 @@ namespace WhichData
             //6px border all around.  Then 14px of window title, 6px again below it to sync to orig window top.
             GUILayout.BeginArea(new Rect(500 - 4 + 16/* + m_padding*/, 0/*m_padding * 2 + m_windowTitleHeight*/, m_window.width - m_padding * 2, m_mainDlgHeight - m_padding * 2)/*, m_dlgSkin.window*/);
             {
-                GUILayout.BeginVertical();
+                if (m_selectedPages.Count == 1) //HACKJEFFGIFFEN
                 {
-                    //title bar
-                    GUILayout.BeginHorizontal();
+                    DataPage curPg = m_selectedPages[0];
+                    GUILayout.BeginVertical();
                     {
-                        m_prevBtDown = GUILayout.Button("", m_stylePrevPage, GUILayout.Width(m_pageButtonSize), GUILayout.Height(m_pageButtonSize + m_pageButtonPadding));
-                        GUILayout.Label(m_curPg.m_kspPage.title, GUILayout.Width(m_titleWidth));
-                        m_nextBtDown = GUILayout.Button("", m_styleNextPage, GUILayout.Width(m_pageButtonSize), GUILayout.Height(m_pageButtonSize + m_pageButtonPadding));
-                    } GUILayout.EndHorizontal();
+                        //title bar
+                        GUILayout.BeginHorizontal();
+                        {
+                            m_prevBtDown = GUILayout.Button("", m_stylePrevPage, GUILayout.Width(m_pageButtonSize), GUILayout.Height(m_pageButtonSize + m_pageButtonPadding));
+                            GUILayout.Label(curPg.m_kspPage.title, GUILayout.Width(m_titleWidth));
+                            m_nextBtDown = GUILayout.Button("", m_styleNextPage, GUILayout.Width(m_pageButtonSize), GUILayout.Height(m_pageButtonSize + m_pageButtonPadding));
+                        } GUILayout.EndHorizontal();
 
-                    GUILayout.Space(m_padding);
+                        GUILayout.Space(m_padding);
 
-                    GUILayout.BeginHorizontal();
+                        GUILayout.BeginHorizontal();
+                        {
+                            //Fat left column
+                            GUILayout.BeginVertical(GUILayout.Width(m_leftColumnWidth)); //width of left column from orig dialog
+                            {
+                                //the skin's box GUIStyle already has the green text and nice top left align
+                                GUILayout.Box(curPg.m_kspPage.resultText, GUILayout.Height(m_resultTextBoxHeight));
+
+                                LayoutInfoField(curPg);
+                                LayoutRecoverScienceBarField(curPg);
+                                LayoutTransmitScienceBarField(curPg);
+
+                            } GUILayout.EndVertical();
+
+                            //Button right column
+                            GUILayout.BeginVertical();
+                            {
+                                //GUI.tooltip = "Discard Data";//HACKJEFFGIFFEN tooltips missing
+                                GUILayout.Button(new GUIContent("", "Discard Data"), m_styleDiscardButton);
+                                // GUILayout.Button( "", m_dlgSkin.GetStyle("discard button"));
+                                //GUI.tooltip = "Keep Data";
+                                GUILayout.Button(new GUIContent("", "Keep Data"), m_styleKeepButton);
+                                //GUI.tooltip = "Transmit Data";
+
+                                GUILayout.Button(curPg.m_transBtnPerc, m_styleTransmitButton);
+                            } GUILayout.EndVertical();
+
+                        } GUILayout.EndHorizontal();
+
+                    } GUILayout.EndVertical();
+                }
+                else
+                {
+                    GUILayout.BeginVertical();
                     {
-                        //Fat left column
-                        GUILayout.BeginVertical(GUILayout.Width(m_leftColumnWidth)); //width of left column from orig dialog
+                        //title bar
+                        GUILayout.BeginHorizontal();
                         {
-                            //the skin's box GUIStyle already has the green text and nice top left align
-                            GUILayout.Box(m_curPg.m_kspPage.resultText, GUILayout.Height(m_resultTextBoxHeight));
+                            //m_prevBtDown = GUILayout.Button("", m_stylePrevPage, GUILayout.Width(m_pageButtonSize), GUILayout.Height(m_pageButtonSize + m_pageButtonPadding));
+                            GUILayout.Label( m_selectedPages.Count + " Experiments Selected", GUILayout.Width(m_titleWidth));
+                            //m_nextBtDown = GUILayout.Button("", m_styleNextPage, GUILayout.Width(m_pageButtonSize), GUILayout.Height(m_pageButtonSize + m_pageButtonPadding));
+                        } GUILayout.EndHorizontal();
 
-                            LayoutInfoField( m_curPg );
-                            LayoutRecoverScienceBarField( m_curPg );
-                            LayoutTransmitScienceBarField( m_curPg );
+                        GUILayout.Space(m_padding);
 
-                        } GUILayout.EndVertical();
-
-                        //Button right column
-                        GUILayout.BeginVertical();
+                        GUILayout.BeginHorizontal();
                         {
-                            //GUI.tooltip = "Discard Data";//HACKJEFFGIFFEN tooltips missing
-                            GUILayout.Button(new GUIContent("", "Discard Data"), m_styleDiscardButton);
-                            // GUILayout.Button( "", m_dlgSkin.GetStyle("discard button"));
-                            //GUI.tooltip = "Keep Data";
-                            GUILayout.Button(new GUIContent("", "Keep Data"), m_styleKeepButton);
-                            //GUI.tooltip = "Transmit Data";
+                            //Fat left column
+                            GUILayout.BeginVertical(GUILayout.Width(m_leftColumnWidth)); //width of left column from orig dialog
+                            {
+                                //the skin's box GUIStyle already has the green text and nice top left align
+                                //GUILayout.Box("multiselect stats");//, GUILayout.Height(m_resultTextBoxHeight));
+                                GUILayout.Button(new GUIContent("Close", m_closeIcon));
 
-                            GUILayout.Button( m_curPg.m_transBtnPerc, m_styleTransmitButton );
-                        } GUILayout.EndVertical();
+                                //LayoutInfoField(m_curPg);
+                                //LayoutRecoverScienceBarField(m_curPg);
+                                //LayoutTransmitScienceBarField(m_curPg);
 
-                    } GUILayout.EndHorizontal();
+                            } GUILayout.EndVertical();
 
-                } GUILayout.EndVertical();
+                            //Button right column
+                            GUILayout.BeginVertical();
+                            {
+                                //GUI.tooltip = "Discard Data";//HACKJEFFGIFFEN tooltips missing
+                                GUILayout.Button(new GUIContent("", "Discard Data"), m_styleDiscardButton);
+                                // GUILayout.Button( "", m_dlgSkin.GetStyle("discard button"));
+                                //GUI.tooltip = "Keep Data";
+                                GUILayout.Button(new GUIContent("", "Keep Data"), m_styleKeepButton);
+                                //GUI.tooltip = "Transmit Data";
+
+                                GUILayout.Button("lolz%", m_styleTransmitButton);
+                            } GUILayout.EndVertical();
+
+                        } GUILayout.EndHorizontal();
+
+                    } GUILayout.EndVertical();
+                }
             } GUILayout.EndArea();
 
             //must be last or it disables all the widgets etc
@@ -484,12 +536,13 @@ namespace WhichData
             } GUILayout.EndHorizontal();
         }
 
-        public void LayoutListField( int i )
+        public void LayoutListField( DataPage pg )
         {
-            DataPage pg = m_dataPages[ i ];
             GUIStyle listField = new GUIStyle( m_dlgSkin.box );
             listField.padding = new RectOffset(0, 0, 0, 0); //nerf padding
             GUIContent nothing = new GUIContent();
+            Color oldColor = GUI.color;
+            GUI.color = pg.m_selected ? Color.yellow : Color.white;
             //GUILayout.BeginHorizontal(m_styleRfBackground);
             pg.m_rowButton = GUILayout.Button( nothing, listField, GUILayout.MaxHeight(m_listFieldMaxHeight));
             Rect btRect = GUILayoutUtility.GetLastRect();
@@ -502,13 +555,12 @@ namespace WhichData
                 walker.width = fieldWidth;
 
                 //experi
+                GUI.color = Color.white;
                 GUI.Label(walker, pg.m_experi, m_styleRfText);
                 walker.x += walker.width;
 
                 //recvr
-                Color oldColor = GUI.color;
                 GUI.color = Color.green;
-
                 string recvrString = pg.m_rcvrValue + "/" + (pg.m_rcvrPrcnt * 100).ToString("F0") + "%";
                 GUI.Label( walker, recvrString, m_styleRfText);
                 walker.x += walker.width;
@@ -518,9 +570,9 @@ namespace WhichData
                 string trnsString = pg.m_trnsValue + "/" + (pg.m_trnsPrcnt * 100).ToString("F0") + "%";
                 GUI.Label(walker, trnsString, m_styleRfText);
                 walker.x += walker.width;
-                GUI.color = oldColor;
 
                 //data mits
+                GUI.color = Color.white;
                 GUI.Label(walker, pg.m_kspPage.dataSize + " Mits", m_styleRfText);
                 walker.x += walker.width;
 
@@ -541,6 +593,7 @@ namespace WhichData
                 walker.x += walker.width;
 
             }// GUILayout.EndHorizontal();
+            GUI.color = oldColor;
         }
 
         public void LazyInit()
@@ -575,6 +628,7 @@ namespace WhichData
             for (int i = 0; i < textures.Length &&
                 (m_dataIcon == null
                 || m_scienceIcon == null
+                || m_closeIcon == null
                 );
                 i++)
             {
@@ -587,6 +641,11 @@ namespace WhichData
                 if (tex.name == "resultsdialog_scivalue")
                 {
                     m_scienceIcon = tex;
+                    continue;
+                }
+                if (tex.name == "Button_delete_round")
+                {
+                    m_closeIcon = tex;
                     continue;
                 }
             }
@@ -646,7 +705,7 @@ namespace WhichData
                 m_dirtyPages = true; //new pages means we need to resort
                 
                 //if we've never picked a page, default
-                if (m_curPg == null) { m_curPg = m_dataPages[0]; }
+                if (m_selectedPages.Count == 0) { m_selectedPages.Add( m_dataPages[0] ); }
 
                 ExperimentsResultDialog.Instance.pages.Clear();
                 Destroy(ExperimentsResultDialog.Instance.gameObject); //1 frame up still...ehh
@@ -701,7 +760,8 @@ namespace WhichData
                 }
 
                 //prev next buttons
-                if (m_prevBtDown || m_nextBtDown)
+                //HACKJEFFGIFFEN
+                /*if (m_prevBtDown || m_nextBtDown)
                 {
                     int pageIndex = m_dataPages.IndexOf(m_curPg);
                     if (m_prevBtDown) { pageIndex -= 1; }
@@ -714,13 +774,38 @@ namespace WhichData
                     m_curPg = m_dataPages[pageIndex];
                 }
                 else
+                */
                 {
                     //page buttons
                     foreach (DataPage page in m_dataPages)
                     {
                         if (page.m_rowButton)
                         {
-                            m_curPg = page;
+                            //unhighlight the old
+                            foreach (DataPage oldPage in m_selectedPages)
+                            {
+                                oldPage.m_selected = false;
+                            }
+
+                            //now discern whether click or altclick
+                            if (Input.GetKey(KeyCode.LeftAlt) || Input.GetKey(KeyCode.RightAlt)) //HACKJEFFGIFFEN
+                            {
+                                int a = m_dataPages.IndexOf(m_selectedPages[0]); //HACKJEFFGIFFEN not great, though small sorts not so bad
+                                int b = m_dataPages.IndexOf(page);
+                                m_selectedPages = a < b ? m_dataPages.GetRange(a, b - a + 1) : m_dataPages.GetRange(b, a - b + 1); // inclusive range
+                            }
+                            else
+                            {
+                                m_selectedPages.Clear();
+                                m_selectedPages.Add(page);
+                            }
+
+                            //highlight the new
+                            foreach (DataPage newPage in m_selectedPages)
+                            {
+                                newPage.m_selected = true;
+                            }
+
                             break;
                         }
                     }
