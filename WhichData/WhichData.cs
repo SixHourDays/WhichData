@@ -21,6 +21,7 @@ namespace WhichData
         public string m_biome;
 
         //hud state
+        public int m_index = 0;
         public bool m_rowButton = false;
         public bool m_selected = false;
 
@@ -308,7 +309,8 @@ namespace WhichData
         public Vector2 m_scrollPos;
         public Texture2D m_dataIcon = null;
         public Texture2D m_scienceIcon = null;
-        public Texture2D m_closeIcon = null;
+        public GUIStyle m_closeBtnStyle = new GUIStyle();
+        public GUIStyle m_moveBtnStyle = new GUIStyle();
     
         //mod state
         public List<SortField> m_sortFields = new List<SortField>
@@ -427,6 +429,7 @@ namespace WhichData
                             //m_prevBtDown = GUILayout.Button("", m_stylePrevPage, GUILayout.Width(m_pageButtonSize), GUILayout.Height(m_pageButtonSize + m_pageButtonPadding));
                             GUILayout.Label( m_selectedPages.Count + " Experiments Selected", GUILayout.Width(m_titleWidth));
                             //m_nextBtDown = GUILayout.Button("", m_styleNextPage, GUILayout.Width(m_pageButtonSize), GUILayout.Height(m_pageButtonSize + m_pageButtonPadding));
+                            GUILayout.Button("", m_closeBtnStyle, GUILayout.Height(25.0f), GUILayout.Width(25.0f)); //HACKJEFFGIFFEN
                         } GUILayout.EndHorizontal();
 
                         GUILayout.Space(m_padding);
@@ -437,8 +440,7 @@ namespace WhichData
                             GUILayout.BeginVertical(GUILayout.Width(m_leftColumnWidth)); //width of left column from orig dialog
                             {
                                 //the skin's box GUIStyle already has the green text and nice top left align
-                                //GUILayout.Box("multiselect stats");//, GUILayout.Height(m_resultTextBoxHeight));
-                                GUILayout.Button(new GUIContent("Close", m_closeIcon));
+                                GUILayout.Box("multiselect stats");//, GUILayout.Height(m_resultTextBoxHeight));
 
                                 //LayoutInfoField(m_curPg);
                                 //LayoutRecoverScienceBarField(m_curPg);
@@ -455,8 +457,10 @@ namespace WhichData
                                 //GUI.tooltip = "Keep Data";
                                 GUILayout.Button(new GUIContent("", "Keep Data"), m_styleKeepButton);
                                 //GUI.tooltip = "Transmit Data";
-
                                 GUILayout.Button("lolz%", m_styleTransmitButton);
+                                
+                                //TODOJEFFGIFFEN assets and button
+                                //GUILayout.Button("Move", m_moveBtnStyle);
                             } GUILayout.EndVertical();
 
                         } GUILayout.EndHorizontal();
@@ -625,11 +629,9 @@ namespace WhichData
 
             //find and use the existing textures from the orig dlg
             Texture2D[] textures = Resources.FindObjectsOfTypeAll<Texture2D>();
-            for (int i = 0; i < textures.Length &&
-                (m_dataIcon == null
-                || m_scienceIcon == null
-                || m_closeIcon == null
-                );
+            for (int i = 0;
+                i < textures.Length &&
+                ( m_dataIcon == null || m_scienceIcon == null );
                 i++)
             {
                 Texture2D tex = textures[i];
@@ -643,12 +645,16 @@ namespace WhichData
                     m_scienceIcon = tex;
                     continue;
                 }
-                if (tex.name == "Button_delete_round")
-                {
-                    m_closeIcon = tex;
-                    continue;
-                }
             }
+
+            m_closeBtnStyle.normal.background = GameDatabase.Instance.GetTexture("SixHourDays/closeBtnNormal", false);
+            m_closeBtnStyle.hover.background = GameDatabase.Instance.GetTexture("SixHourDays/closeBtnHover", false);
+            m_closeBtnStyle.active.background = GameDatabase.Instance.GetTexture("SixHourDays/closeBtnDown", false);
+
+            //TODOJEFFGIFFEN assets
+            //m_moveBtnStyle.normal.background = (Texture2D)Resources.Load("BtnNormal.png");
+            //m_moveBtnStyle.hover.background = (Texture2D)Resources.Load("BtnHover.png");
+            //m_moveBtnStyle.active.background = (Texture2D)Resources.Load("BtnDown.png");
 
             //CelestialBody minmus = ScaledSpace.Instance.gameObject.transform.FindChild("Minmus").GetComponent<CelestialBody>();
             /*Debug.Log("GA " + m_callCount++ + " bodies");
@@ -704,9 +710,6 @@ namespace WhichData
                 }
                 m_dirtyPages = true; //new pages means we need to resort
                 
-                //if we've never picked a page, default
-                if (m_selectedPages.Count == 0) { m_selectedPages.Add( m_dataPages[0] ); }
-
                 ExperimentsResultDialog.Instance.pages.Clear();
                 Destroy(ExperimentsResultDialog.Instance.gameObject); //1 frame up still...ehh
             }
@@ -754,6 +757,16 @@ namespace WhichData
                         //ok to sort on no criteria
                         m_dataPages.Sort( m_rankSorter );
                         m_dirtyPages = false;
+
+                        //once re-ordered, indices need updating
+                        int i = 0;
+                        foreach (DataPage page in m_dataPages)
+                        {
+                            page.m_index = i++;
+                        }
+
+                        //if we've never picked a page, default
+                        if (m_selectedPages.Count == 0) { m_selectedPages.Add(m_dataPages[0]); }
                     }
 
                     //TODOJEFFGIFFEN possibly use GUIStyle down state clone to highlight selected list row
@@ -788,11 +801,14 @@ namespace WhichData
                             }
 
                             //now discern whether click or altclick
-                            if (Input.GetKey(KeyCode.LeftAlt) || Input.GetKey(KeyCode.RightAlt)) //HACKJEFFGIFFEN
+                            if (Input.GetKey(KeyCode.LeftAlt) || Input.GetKey(KeyCode.RightAlt))
                             {
-                                int a = m_dataPages.IndexOf(m_selectedPages[0]); //HACKJEFFGIFFEN not great, though small sorts not so bad
-                                int b = m_dataPages.IndexOf(page);
-                                m_selectedPages = a < b ? m_dataPages.GetRange(a, b - a + 1) : m_dataPages.GetRange(b, a - b + 1); // inclusive range
+                                int a = m_selectedPages[0].m_index; //smallest selected index 
+                                int b = m_selectedPages[m_selectedPages.Count - 1].m_index; //largest
+                                int c = page.m_index; //brand new index chosen
+                                int start = Math.Min(Math.Min(a, b), c);
+                                int end = Math.Max(Math.Max(a, b), c);
+                                m_selectedPages = m_dataPages.GetRange(start, end - start + 1); // inclusive range
                             }
                             else
                             {
