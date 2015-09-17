@@ -392,7 +392,7 @@ namespace WhichData
                             m_prevBtDown = GUILayout.Button("", m_stylePrevPage, GUILayout.Width(m_pageButtonSize), GUILayout.Height(m_pageButtonSize + m_pageButtonPadding));
                             GUILayout.Label(curPg.m_kspPage.title, GUILayout.Width(m_titleWidth));
                             m_nextBtDown = GUILayout.Button("", m_styleNextPage, GUILayout.Width(m_pageButtonSize), GUILayout.Height(m_pageButtonSize + m_pageButtonPadding));
-                            m_closeBtn = GUILayout.Button("", m_closeBtnStyle, GUILayout.Height(25.0f), GUILayout.Width(25.0f));
+                            m_closeBtn = GUILayout.Button("", m_closeBtnStyle );
                         } GUILayout.EndHorizontal();
 
                         GUILayout.Space(m_padding);
@@ -418,7 +418,7 @@ namespace WhichData
                                 //GUI.tooltip = "Discard Data";
                                 //GUILayout.Button(new GUIContent("", "Discard Data"), m_styleDiscardButton);
                                 m_discardBtn = GUILayout.Button("", m_styleDiscardButton);
-                                m_moveBtn = GUILayout.Button("", m_moveBtnStyle, GUILayout.Height(55.0f), GUILayout.Width(55.0f));
+                                m_moveBtn = GUILayout.Button("", m_moveBtnStyle );
                                 m_labBtn = GUILayout.Button(curPg.m_labBtnData, m_styleLabButton);
                                 m_transmitBtn = GUILayout.Button( curPg.m_transBtnPerc, m_styleTransmitButton );
 
@@ -656,15 +656,17 @@ namespace WhichData
                 }
             }
 
-            m_closeBtnStyle.normal.background = GameDatabase.Instance.GetTexture("SixHourDays/closeBtnNormal", false);
-            m_closeBtnStyle.hover.background = GameDatabase.Instance.GetTexture("SixHourDays/closeBtnHover", false);
-            m_closeBtnStyle.active.background = GameDatabase.Instance.GetTexture("SixHourDays/closeBtnDown", false);
+            m_closeBtnStyle.margin = new RectOffset(5, 5, 5, 5);
+            m_closeBtnStyle.fixedWidth = m_moveBtnStyle.fixedHeight = 25.0f;
+            m_closeBtnStyle.normal.background = GameDatabase.Instance.GetTexture("SixHourDays/closebtnnormal", false);
+            m_closeBtnStyle.hover.background = GameDatabase.Instance.GetTexture("SixHourDays/closebtnhover", false);
+            m_closeBtnStyle.active.background = GameDatabase.Instance.GetTexture("SixHourDays/closebtndown", false);
 
-            m_moveBtnStyle.margin = new RectOffset(7, 7, 0, 0);
-            
-            m_moveBtnStyle.normal.background = GameDatabase.Instance.GetTexture("SixHourDays/moveBtnNormal", false);
-            m_moveBtnStyle.hover.background = GameDatabase.Instance.GetTexture("SixHourDays/moveBtnHover", false);
-            m_moveBtnStyle.active.background = GameDatabase.Instance.GetTexture("SixHourDays/moveBtnDown", false);
+            m_moveBtnStyle.margin = new RectOffset(7, 7, 2, 2);
+            m_moveBtnStyle.fixedWidth = m_moveBtnStyle.fixedHeight = 55.0f;
+            m_moveBtnStyle.normal.background = GameDatabase.Instance.GetTexture("SixHourDays/movebtnnormal", false);
+            m_moveBtnStyle.hover.background = GameDatabase.Instance.GetTexture("SixHourDays/movebtnhover", false);
+            m_moveBtnStyle.active.background = GameDatabase.Instance.GetTexture("SixHourDays/movebtndown", false);
 
             //CelestialBody minmus = ScaledSpace.Instance.gameObject.transform.FindChild("Minmus").GetComponent<CelestialBody>();
             /*Debug.Log("GA " + m_callCount++ + " bodies");

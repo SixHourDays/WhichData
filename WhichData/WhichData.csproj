@@ -54,7 +54,12 @@
 rmdir /S /Q %25SHD%25
 mkdir %25SHD%25
 copy /Y $(TargetPath) %25SHD%25
-copy /Y "$(SolutionDir)art\*.dds" %25SHD%25</PostBuildEvent>
+copy /Y "$(SolutionDir)art\*.tga" %25SHD%25
+
+set SaveDir="$(SolutionDir)..\Kerbal Space ProgramDev\saves\WhichDataTest\"
+if not exist %25SaveDir%25 mkdir %25SaveDir%25
+copy /Y "$(SolutionDir)testSave\persistent.sfs" %25SaveDir%25
+</PostBuildEvent>
   </PropertyGroup>
   <!-- To modify your build process, add your task inside one of the targets below and uncomment it. 
        Other similar extension points exist, see Microsoft.Common.targets.
