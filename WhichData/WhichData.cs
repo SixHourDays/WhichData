@@ -417,8 +417,8 @@ namespace WhichData
                                 //HACKJEFFGIFFEN tooltips missing: old attempts at the tooltips...why dont you love me WHY
                                 //GUI.tooltip = "Discard Data";
                                 //GUILayout.Button(new GUIContent("", "Discard Data"), m_styleDiscardButton);
+                                m_discardBtn = GUILayout.Button("", m_styleDiscardButton);
                                 m_moveBtn = GUILayout.Button("", m_moveBtnStyle, GUILayout.Height(55.0f), GUILayout.Width(55.0f));
-                                m_discardBtn = GUILayout.Button( "", m_styleDiscardButton );
                                 m_labBtn = GUILayout.Button(curPg.m_labBtnData, m_styleLabButton);
                                 m_transmitBtn = GUILayout.Button( curPg.m_transBtnPerc, m_styleTransmitButton );
 
@@ -660,7 +660,8 @@ namespace WhichData
             m_closeBtnStyle.hover.background = GameDatabase.Instance.GetTexture("SixHourDays/closeBtnHover", false);
             m_closeBtnStyle.active.background = GameDatabase.Instance.GetTexture("SixHourDays/closeBtnDown", false);
 
-            //TODOJEFFGIFFEN why why why m_moveBtnStyle.padding = new RectOffset(7, 0, 0, 0);
+            m_moveBtnStyle.margin = new RectOffset(7, 7, 0, 0);
+            
             m_moveBtnStyle.normal.background = GameDatabase.Instance.GetTexture("SixHourDays/moveBtnNormal", false);
             m_moveBtnStyle.hover.background = GameDatabase.Instance.GetTexture("SixHourDays/moveBtnHover", false);
             m_moveBtnStyle.active.background = GameDatabase.Instance.GetTexture("SixHourDays/moveBtnDown", false);
