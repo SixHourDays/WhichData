@@ -37,6 +37,7 @@ namespace WhichData
         public string m_trnsFieldMsg;
         public float m_trnsFieldBackBar;
         public string m_transBtnPerc; //0% when sci is 0 pts, and integer % otherwise
+        public string m_labBtnData;
 
         //hacks 1
         public float m_sciHack = 0.5f;
@@ -60,6 +61,7 @@ namespace WhichData
             m_trnsFieldMsg = "Transmit: +" + m_trnsValue + " Science";
             m_trnsFieldBackBar = m_rcvrFieldBackBar * m_kspPage.xmitDataScalar;
             m_transBtnPerc = (m_trnsPrcnt >= 0.1f ? m_kspPage.xmitDataScalar * 100 : 0.0f).ToString("F0") + "%"; //if transmit sci is 0pts, then % is 0
+            m_labBtnData = "+" + m_kspPage.pageData.labValue.ToString("F0");
 
             //parse out subjectIDs of the form (we ditch the @):
             //  crewReport@KerbinSrfLandedLaunchPad
@@ -268,12 +270,12 @@ namespace WhichData
         //window pixel positions etc
         //default window in 1920x1080 is at 243, 190, 413x240
         //we want to be 428px to the right to compare easily, and 18px taller for our window title)
-        public float m_mainDlgHeight = 240 + 18;
-        public Rect m_window = new Rect(243/* + 428*/, 190 - 16, 913/*413*/, 240 + 18/* + 240*/); //double width//HACKJEFFGIFFEN
-        public Rect m_myDlg = new Rect(0, /*240 + */18, 500 - 4, 240 - 4);
+        public float m_mainDlgHeight = 280 + 18;//240 + 18;
+        public Rect m_window = new Rect(243/* + 428*/, 190 - 16, 913/*413*/, 280 + 18/* + 240*/); //double width, 240 + 40 more + 18 height //HACKJEFFGIFFEN
+        public Rect m_myDlg = new Rect(0, /*240 + */18, 500 - 4, 280 - 4);
         public int m_windowTitleHeight = 14;
         public int m_padding = 6;
-        public int m_titleWidth = 328;
+        public int m_titleWidth = 328 - 10; //HACKJEFFGIFFEN close button shoved out by 10
         public int m_leftColumnWidth = 325;
         public int m_resultTextBoxHeight = 110;
         public int m_barToEndPad = 2;
@@ -306,6 +308,12 @@ namespace WhichData
         //GUI state
         public bool m_prevBtDown = false;
         public bool m_nextBtDown = false;
+        public bool m_closeBtn = false;
+        public bool m_moveBtn = false;
+        public bool m_discardBtn = false;
+        public bool m_transmitBtn = false;
+        public bool m_labBtn = false;
+
         public Vector2 m_scrollPos;
         public Texture2D m_dataIcon = null;
         public Texture2D m_scienceIcon = null;
@@ -384,6 +392,7 @@ namespace WhichData
                             m_prevBtDown = GUILayout.Button("", m_stylePrevPage, GUILayout.Width(m_pageButtonSize), GUILayout.Height(m_pageButtonSize + m_pageButtonPadding));
                             GUILayout.Label(curPg.m_kspPage.title, GUILayout.Width(m_titleWidth));
                             m_nextBtDown = GUILayout.Button("", m_styleNextPage, GUILayout.Width(m_pageButtonSize), GUILayout.Height(m_pageButtonSize + m_pageButtonPadding));
+                            m_closeBtn = GUILayout.Button("", m_closeBtnStyle, GUILayout.Height(25.0f), GUILayout.Width(25.0f));
                         } GUILayout.EndHorizontal();
 
                         GUILayout.Space(m_padding);
@@ -405,14 +414,14 @@ namespace WhichData
                             //Button right column
                             GUILayout.BeginVertical();
                             {
-                                //GUI.tooltip = "Discard Data";//HACKJEFFGIFFEN tooltips missing
-                                GUILayout.Button(new GUIContent("", "Discard Data"), m_styleDiscardButton);
-                                // GUILayout.Button( "", m_dlgSkin.GetStyle("discard button"));
-                                //GUI.tooltip = "Keep Data";
-                                GUILayout.Button(new GUIContent("", "Keep Data"), m_styleKeepButton);
-                                //GUI.tooltip = "Transmit Data";
+                                //HACKJEFFGIFFEN tooltips missing: old attempts at the tooltips...why dont you love me WHY
+                                //GUI.tooltip = "Discard Data";
+                                //GUILayout.Button(new GUIContent("", "Discard Data"), m_styleDiscardButton);
+                                m_moveBtn = GUILayout.Button("", m_moveBtnStyle, GUILayout.Height(55.0f), GUILayout.Width(55.0f));
+                                m_discardBtn = GUILayout.Button( "", m_styleDiscardButton );
+                                m_labBtn = GUILayout.Button(curPg.m_labBtnData, m_styleLabButton);
+                                m_transmitBtn = GUILayout.Button( curPg.m_transBtnPerc, m_styleTransmitButton );
 
-                                GUILayout.Button(curPg.m_transBtnPerc, m_styleTransmitButton);
                             } GUILayout.EndVertical();
 
                         } GUILayout.EndHorizontal();
@@ -651,10 +660,10 @@ namespace WhichData
             m_closeBtnStyle.hover.background = GameDatabase.Instance.GetTexture("SixHourDays/closeBtnHover", false);
             m_closeBtnStyle.active.background = GameDatabase.Instance.GetTexture("SixHourDays/closeBtnDown", false);
 
-            //TODOJEFFGIFFEN assets
-            //m_moveBtnStyle.normal.background = (Texture2D)Resources.Load("BtnNormal.png");
-            //m_moveBtnStyle.hover.background = (Texture2D)Resources.Load("BtnHover.png");
-            //m_moveBtnStyle.active.background = (Texture2D)Resources.Load("BtnDown.png");
+            //TODOJEFFGIFFEN why why why m_moveBtnStyle.padding = new RectOffset(7, 0, 0, 0);
+            m_moveBtnStyle.normal.background = GameDatabase.Instance.GetTexture("SixHourDays/moveBtnNormal", false);
+            m_moveBtnStyle.hover.background = GameDatabase.Instance.GetTexture("SixHourDays/moveBtnHover", false);
+            m_moveBtnStyle.active.background = GameDatabase.Instance.GetTexture("SixHourDays/moveBtnDown", false);
 
             //CelestialBody minmus = ScaledSpace.Instance.gameObject.transform.FindChild("Minmus").GetComponent<CelestialBody>();
             /*Debug.Log("GA " + m_callCount++ + " bodies");
@@ -826,6 +835,23 @@ namespace WhichData
                         }
                     }
                 }
+
+                //TODOJEFFGIFFEN
+                //buttons should context sensitive - number of experi they apply to displayed like X / All.
+                //move button imagery:
+                //  onboard should be folder arrow capsule //thought, science symbol instead?
+                //  eva get should be folder arrow kerb
+                //  eva put should be folder arrow capsule
+                //buttons should either be live or ghosted, NEVER gone, NEVER move.
+                //on any actual button down:
+                //  call that callback for selected list
+                //  remove entries from m_dataPages, clear selected
+                //  trigger list refresh (resot, reindex, reset selected)
+                //button ghost conditions:
+                //  no antenna
+                //  no lab
+                //  lab, but it has copies of all selected
+                //  all selected are in only onboard sci container (nowher to go as experi are data out only)
             }
             /*Debug.Log("GA dataSize " + curPg.dataSize);
                 Debug.Log("GA refValue " + curPg.refValue);
