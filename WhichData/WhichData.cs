@@ -268,16 +268,14 @@ namespace WhichData
         public float m_barMinPx = 7.0f;
         
         //window pixel positions etc
-        //default window in 1920x1080 is at 243, 190, 413x240
-        //we want to be 428px to the right to compare easily, and 18px taller for our window title)
-        public float m_mainDlgHeight = 280 + 18;//240 + 18;
-        public Rect m_window = new Rect(243/* + 428*/, 190 - 16, 913/*413*/, 280 + 18/* + 240*/); //double width, 240 + 40 more + 18 height //HACKJEFFGIFFEN
-        public Rect m_myDlg = new Rect(0, /*240 + */18, 500 - 4, 280 - 4);
-        public int m_windowTitleHeight = 14;
+        //default window in 1920x1080 is at 243, 190, 413x240 (10px of grey round thinger at left)
+        //500px of list pane, 413 of info pane ( -10 left grey thing -9 fat left pad of info. y+60 for 'all' button height //HACKJEFFGIFFEN
+        public Rect m_window = new Rect(243, 190, 500 + 394, 240 + 64);
+        public Rect m_listPaneRect = new Rect(6, 6, 500 - 6 * 2, 240 + 64 - 6 * 2); //y origin is m_padding really
+        //6px border all around.  Then 14px of window title, 6px again below it to sync to orig window top.
+        public Rect m_infoPaneRect = new Rect(500 + 3, 6, 391 - 3, 240 + 64 - 6 * 2); //note, top/bottom pad, 3 combined w list's 6 = 9 left pad.  no right pad (made of dropshadow).
         public int m_padding = 6;
-        public int m_titleWidth = 328 - 10; //HACKJEFFGIFFEN close button shoved out by 10
         public int m_leftColumnWidth = 325;
-        public int m_resultTextBoxHeight = 110;
         public int m_barToEndPad = 2;
         public Color m_inopWarnOrange = new Color(1.0f, 0.63f, 0.0f); //orangey gold
         public int m_listFieldMaxHeight = 22;  //height of each list row. min be 18, helps with click probability some
@@ -342,9 +340,11 @@ namespace WhichData
             {
                 int uid = GUIUtility.GetControlID(FocusType.Passive); //get a nice unique window id from system
                 GUI.skin = m_dlgSkin;
-                m_window = GUI.Window(uid, m_window, WindowLayout, "WhichData", HighLogic.Skin.window); //style
+                m_window = GUI.Window(uid, m_window, WindowLayout, "", HighLogic.Skin.window); //style
             }
         }
+
+        public delegate void LayoutBodyDlgt();
 
         void WindowLayout(int windowID)
         {
@@ -353,7 +353,7 @@ namespace WhichData
             //  align the top of button with field
             //  figure out how to make a ConverterResults field clickable / highlight and shit
 
-            GUILayout.BeginArea(m_myDlg/*, HighLogic.Skin.window*/);
+            GUILayout.BeginArea(m_listPaneRect/*, HighLogic.Skin.window*/);
             {
                 GUILayout.BeginHorizontal();
                 {
@@ -378,108 +378,93 @@ namespace WhichData
 
             } GUILayout.EndArea();
 
-            //6px border all around.  Then 14px of window title, 6px again below it to sync to orig window top.
-            GUILayout.BeginArea(new Rect(500 - 4 + 16/* + m_padding*/, 0/*m_padding * 2 + m_windowTitleHeight*/, m_window.width - m_padding * 2, m_mainDlgHeight - m_padding * 2)/*, m_dlgSkin.window*/);
+            GUILayout.BeginArea(m_infoPaneRect/*, m_dlgSkin.window*/);
             {
                 if (m_selectedPages.Count == 1) //HACKJEFFGIFFEN
                 {
                     DataPage curPg = m_selectedPages[0];
-                    GUILayout.BeginVertical();
-                    {
-                        //title bar
-                        GUILayout.BeginHorizontal();
-                        {
-                            m_prevBtDown = GUILayout.Button("", m_stylePrevPage, GUILayout.Width(m_pageButtonSize), GUILayout.Height(m_pageButtonSize + m_pageButtonPadding));
-                            GUILayout.Label(curPg.m_kspPage.title, GUILayout.Width(m_titleWidth));
-                            m_nextBtDown = GUILayout.Button("", m_styleNextPage, GUILayout.Width(m_pageButtonSize), GUILayout.Height(m_pageButtonSize + m_pageButtonPadding));
-                            m_closeBtn = GUILayout.Button("", m_closeBtnStyle );
-                        } GUILayout.EndHorizontal();
-
-                        GUILayout.Space(m_padding);
-
-                        GUILayout.BeginHorizontal();
-                        {
-                            //Fat left column
-                            GUILayout.BeginVertical(GUILayout.Width(m_leftColumnWidth)); //width of left column from orig dialog
-                            {
-                                //the skin's box GUIStyle already has the green text and nice top left align
-                                GUILayout.Box(curPg.m_kspPage.resultText, GUILayout.Height(m_resultTextBoxHeight));
-
-                                LayoutInfoField(curPg);
-                                LayoutRecoverScienceBarField(curPg);
-                                LayoutTransmitScienceBarField(curPg);
-
-                            } GUILayout.EndVertical();
-
-                            //Button right column
-                            GUILayout.BeginVertical();
-                            {
-                                //HACKJEFFGIFFEN tooltips missing: old attempts at the tooltips...why dont you love me WHY
-                                //GUI.tooltip = "Discard Data";
-                                //GUILayout.Button(new GUIContent("", "Discard Data"), m_styleDiscardButton);
-                                m_discardBtn = GUILayout.Button("", m_styleDiscardButton);
-                                m_moveBtn = GUILayout.Button("", m_moveBtnStyle );
-                                m_labBtn = GUILayout.Button(curPg.m_labBtnData, m_styleLabButton);
-                                m_transmitBtn = GUILayout.Button( curPg.m_transBtnPerc, m_styleTransmitButton );
-
-                            } GUILayout.EndVertical();
-
-                        } GUILayout.EndHorizontal();
-
-                    } GUILayout.EndVertical();
+                    LayoutInfoPane( curPg.m_kspPage.title, LayoutBodySingle, curPg.m_labBtnData, curPg.m_transBtnPerc);
                 }
                 else
                 {
-                    GUILayout.BeginVertical();
-                    {
-                        //title bar
-                        GUILayout.BeginHorizontal();
-                        {
-                            //m_prevBtDown = GUILayout.Button("", m_stylePrevPage, GUILayout.Width(m_pageButtonSize), GUILayout.Height(m_pageButtonSize + m_pageButtonPadding));
-                            GUILayout.Label( m_selectedPages.Count + " Experiments Selected", GUILayout.Width(m_titleWidth));
-                            //m_nextBtDown = GUILayout.Button("", m_styleNextPage, GUILayout.Width(m_pageButtonSize), GUILayout.Height(m_pageButtonSize + m_pageButtonPadding));
-                            GUILayout.Button("", m_closeBtnStyle, GUILayout.Height(25.0f), GUILayout.Width(25.0f)); //HACKJEFFGIFFEN
-                        } GUILayout.EndHorizontal();
-
-                        GUILayout.Space(m_padding);
-
-                        GUILayout.BeginHorizontal();
-                        {
-                            //Fat left column
-                            GUILayout.BeginVertical(GUILayout.Width(m_leftColumnWidth)); //width of left column from orig dialog
-                            {
-                                //the skin's box GUIStyle already has the green text and nice top left align
-                                GUILayout.Box("multiselect stats");//, GUILayout.Height(m_resultTextBoxHeight));
-
-                                //LayoutInfoField(m_curPg);
-                                //LayoutRecoverScienceBarField(m_curPg);
-                                //LayoutTransmitScienceBarField(m_curPg);
-
-                            } GUILayout.EndVertical();
-
-                            //Button right column
-                            GUILayout.BeginVertical();
-                            {
-                                //GUI.tooltip = "Discard Data";//HACKJEFFGIFFEN tooltips missing
-                                GUILayout.Button(new GUIContent("", "Discard Data"), m_styleDiscardButton);
-                                // GUILayout.Button( "", m_dlgSkin.GetStyle("discard button"));
-                                //GUI.tooltip = "Keep Data";
-                                GUILayout.Button(new GUIContent("", "Keep Data"), m_styleKeepButton);
-                                //GUI.tooltip = "Transmit Data";
-                                GUILayout.Button("lolz%", m_styleTransmitButton);
-                                
-                                //TODOJEFFGIFFEN assets and button
-                                //GUILayout.Button("Move", m_moveBtnStyle);
-                            } GUILayout.EndVertical();
-
-                        } GUILayout.EndHorizontal();
-
-                    } GUILayout.EndVertical();
+                    LayoutInfoPane( m_selectedPages.Count + " Experiments Selected", LayoutBodyGroup, "lols", "woot" );
                 }
+
             } GUILayout.EndArea();
 
             //must be last or it disables all the widgets etc
             GUI.DragWindow();
+        }
+
+        public void LayoutBodySingle()
+        {
+            DataPage curPg = m_selectedPages[0];
+            //the skin's box GUIStyle already has the green text and nice top left align
+            GUILayout.Box(curPg.m_kspPage.resultText);
+
+            LayoutInfoField(curPg);
+            LayoutRecoverScienceBarField(curPg);
+            LayoutTransmitScienceBarField(curPg);
+        }
+
+        public void LayoutBodyGroup()
+        {
+            //the skin's box GUIStyle already has the green text and nice top left align
+            GUILayout.Box("multiselect stats"); //HACKJEFFGIFFEN
+
+            //LayoutInfoField(curPg);
+            //LayoutRecoverScienceBarField(curPg);
+            //LayoutTransmitScienceBarField(curPg);
+        }
+
+        public void LayoutInfoPane( string title, LayoutBodyDlgt dlgt, string labMsg, string trnsMsg )
+        {
+            GUILayout.BeginVertical();
+            {
+                LayoutTitleBar( title );
+                GUILayout.Space( 4 ); //to align with the list pane's top
+
+                GUILayout.BeginHorizontal();
+                {
+                    //Fat left column
+                    GUILayout.BeginVertical(GUILayout.Width(m_leftColumnWidth)); //width of left column from orig dialog
+                    {
+                        dlgt(); //HACKJEFFGIFFEN not..the greatest thing...
+
+                    } GUILayout.EndVertical();
+
+                    //Rightside button column
+                    LayoutActionButtons( labMsg,  trnsMsg );
+
+                } GUILayout.EndHorizontal();
+
+            } GUILayout.EndVertical();
+        }
+
+        public void LayoutTitleBar(string title)
+        {
+            GUILayout.BeginHorizontal();
+            {
+                //m_prevBtDown = GUILayout.Button("", m_stylePrevPage, GUILayout.Width(m_pageButtonSize), GUILayout.Height(m_pageButtonSize + m_pageButtonPadding));
+                GUILayout.Label(title);
+                //m_nextBtDown = GUILayout.Button("", m_styleNextPage, GUILayout.Width(m_pageButtonSize), GUILayout.Height(m_pageButtonSize + m_pageButtonPadding));
+                m_closeBtn = GUILayout.Button("", m_closeBtnStyle);
+            } GUILayout.EndHorizontal();
+        }
+
+        public void LayoutActionButtons( string labMsg, string trnsMsg )
+        {
+            GUILayout.BeginVertical();
+            {
+                //HACKJEFFGIFFEN tooltips missing: old attempts at the tooltips...why dont you love me WHY
+                //GUI.tooltip = "Discard Data";
+                //GUILayout.Button(new GUIContent("", "Discard Data"), m_styleDiscardButton);
+                m_discardBtn = GUILayout.Button("", m_styleDiscardButton);
+                m_moveBtn = GUILayout.Button("", m_moveBtnStyle);
+                m_labBtn = GUILayout.Button( labMsg, m_styleLabButton);
+                m_transmitBtn = GUILayout.Button( trnsMsg, m_styleTransmitButton);
+
+            } GUILayout.EndVertical();
         }
 
         public void LayoutInfoField(DataPage page)
@@ -656,7 +641,7 @@ namespace WhichData
                 }
             }
 
-            m_closeBtnStyle.margin = new RectOffset(5, 5, 5, 5);
+            m_closeBtnStyle.margin = new RectOffset(6, 6, 0, 0); //top pad from window, bottom irrelevant
             m_closeBtnStyle.fixedWidth = m_closeBtnStyle.fixedHeight = 25.0f;
             m_closeBtnStyle.normal.background = GameDatabase.Instance.GetTexture("SixHourDays/closebtnnormal", false);
             m_closeBtnStyle.hover.background = GameDatabase.Instance.GetTexture("SixHourDays/closebtnhover", false);
@@ -778,7 +763,12 @@ namespace WhichData
                         }
 
                         //if we've never picked a page, default
-                        if (m_selectedPages.Count == 0) { m_selectedPages.Add(m_dataPages[0]); }
+                        if (m_selectedPages.Count == 0) 
+                        {
+                            DataPage first = m_dataPages[0];
+                            first.m_selected = true;
+                            m_selectedPages.Add(first); 
+                        }
                     }
 
                     //TODOJEFFGIFFEN possibly use GUIStyle down state clone to highlight selected list row
