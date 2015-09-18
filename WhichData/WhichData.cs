@@ -657,7 +657,7 @@ namespace WhichData
             }
 
             m_closeBtnStyle.margin = new RectOffset(5, 5, 5, 5);
-            m_closeBtnStyle.fixedWidth = m_moveBtnStyle.fixedHeight = 25.0f;
+            m_closeBtnStyle.fixedWidth = m_closeBtnStyle.fixedHeight = 25.0f;
             m_closeBtnStyle.normal.background = GameDatabase.Instance.GetTexture("SixHourDays/closebtnnormal", false);
             m_closeBtnStyle.hover.background = GameDatabase.Instance.GetTexture("SixHourDays/closebtnhover", false);
             m_closeBtnStyle.active.background = GameDatabase.Instance.GetTexture("SixHourDays/closebtndown", false);
