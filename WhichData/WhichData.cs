@@ -118,7 +118,7 @@ namespace WhichData
         private static int CmpFlt(float a, float b) { return a < b ? -1 : a == b ? 0 : 1; }
         
         //Comparators for delegation
-        public delegate int SortDlgt(DataPage x, DataPage y);
+        public delegate int SortDlgt(DataPage x, DataPage y); //HACKJEFFGIFFEN static?
         public static int CmpPart(DataPage x, DataPage y) { return CmpStr(x.m_experi, y.m_experi); }
         public static int CmpRcvrSci(DataPage x, DataPage y) { return CmpFlt(x.m_kspPage.scienceValue, y.m_kspPage.scienceValue); }
         public static int CmpTrnsSci(DataPage x, DataPage y) { return CmpFlt(x.m_kspPage.transmitValue, y.m_kspPage.transmitValue); }
@@ -350,8 +350,6 @@ namespace WhichData
         {
             //  TODOJEFFGIFFEN
             //  make transmit light blue just be 5 px back off dark blue
-            //  align the top of button with field
-            //  figure out how to make a ConverterResults field clickable / highlight and shit
 
             GUILayout.BeginArea(m_listPaneRect/*, HighLogic.Skin.window*/);
             {
@@ -422,7 +420,7 @@ namespace WhichData
             GUILayout.BeginVertical();
             {
                 LayoutTitleBar( title );
-                GUILayout.Space( 4 ); //to align with the list pane's top
+                GUILayout.Space( 4 ); //HACKJEFFGIFFEN to align with the list pane's top
 
                 GUILayout.BeginHorizontal();
                 {
@@ -725,7 +723,7 @@ namespace WhichData
                         {
                             if (sf.m_enabled) //toggle off->on
                             {
-                                m_rankSorter.AddSortField( sf );
+                                m_rankSorter.AddSortField(sf);
                                 sf.m_enabled = false;
                                 sf.m_text = sf.m_text.Insert(0, m_rankSorter.GetTotalRanks().ToString() + "^"); //HACKJEFFGIFFEN shitty arrow
                                 m_dirtyPages = true;
@@ -733,7 +731,7 @@ namespace WhichData
                             else
                             {
                                 //can only untoggle most recent
-                                if (sf.Equals( m_rankSorter.GetLastSortField() ) )
+                                if (sf.Equals(m_rankSorter.GetLastSortField()))
                                 {
                                     m_rankSorter.RemoveLastSortField();
                                     sf.m_enabled = true;
@@ -752,7 +750,7 @@ namespace WhichData
                     {
                         //actual sort based on toggle ranks
                         //ok to sort on no criteria
-                        m_dataPages.Sort( m_rankSorter );
+                        m_dataPages.Sort(m_rankSorter);
                         m_dirtyPages = false;
 
                         //once re-ordered, indices need updating
@@ -763,11 +761,11 @@ namespace WhichData
                         }
 
                         //if we've never picked a page, default
-                        if (m_selectedPages.Count == 0) 
+                        if (m_selectedPages.Count == 0)
                         {
                             DataPage first = m_dataPages[0];
                             first.m_selected = true;
-                            m_selectedPages.Add(first); 
+                            m_selectedPages.Add(first);
                         }
                     }
 
@@ -829,6 +827,10 @@ namespace WhichData
                     }
                 }
 
+                if ( m_discardBtn )
+                {
+                }
+
                 //TODOJEFFGIFFEN
                 //buttons should context sensitive - number of experi they apply to displayed like X / All.
                 //move button imagery:
@@ -866,6 +868,25 @@ namespace WhichData
                 */
         }
 
+        public delegate Callback<ScienceData> GetKSPDelgt(DataPage pg);
+
+        public Callback<ScienceData> GetDiscardDlgt( DataPage pg ) { return pg.m_kspPage.OnDiscardData; }
+        public Callback<ScienceData> GetKeepDlgt( DataPage pg ) { return pg.m_kspPage.OnKeepData; }
+        public Callback<ScienceData> GetTransmitDlgt( DataPage pg ) { return pg.m_kspPage.OnTransmitData; }
+        public Callback<ScienceData> GetLabDlgt( DataPage pg ) { return pg.m_kspPage.OnSendToLab; } 
+
+        //public void ExecuteAction( GetKSPDelgt getDlgt )
+        public void ExecuteAction( Callback< DataPage> getDlgt)
+        {
+            foreach( DataPage pg in m_selectedPages.Reverse<DataPage>() )
+            {
+                Callback<ScienceData> dlgt = getDlgt( pg );
+                dlgt( pg.m_kspPage.pageData ); //i assume this will remove/etc the ScienceData from the ScienceContainer?
+                m_dataPages.RemoveAt( pg.m_index ); //and that's why we're removing selectees backwards
+            }
+            m_dirtyPages = true;
+            m_selectedPages.Clear();
+        }
 
         public void OnDisable()
         {
