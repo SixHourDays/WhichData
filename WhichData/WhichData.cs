@@ -118,7 +118,7 @@ namespace WhichData
         private static int CmpFlt(float a, float b) { return a < b ? -1 : a == b ? 0 : 1; }
         
         //Comparators for delegation
-        public delegate int SortDlgt(DataPage x, DataPage y); //HACKJEFFGIFFEN static?
+        public delegate int SortDlgt(DataPage x, DataPage y);
         public static int CmpPart(DataPage x, DataPage y) { return CmpStr(x.m_experi, y.m_experi); }
         public static int CmpRcvrSci(DataPage x, DataPage y) { return CmpFlt(x.m_kspPage.scienceValue, y.m_kspPage.scienceValue); }
         public static int CmpTrnsSci(DataPage x, DataPage y) { return CmpFlt(x.m_kspPage.transmitValue, y.m_kspPage.transmitValue); }
@@ -692,20 +692,14 @@ namespace WhichData
                 //lazy copy of assets from ksp on first run
                 if (m_dlgSkin == null) { LazyInit(); }
 
-                //steal pages in compare mode (both show)
-                /*if (m_pages.Count == 0) //do only once to not flood
-                {
-                    m_pages.AddRange(ExperimentsResultDialog.Instance.pages);
-                }
-                 */
-
+                //copy result pages to our collection
                 foreach (ExperimentResultDialogPage resultPage in ExperimentsResultDialog.Instance.pages)
                 {
                     m_dataPages.Add(new DataPage(resultPage));
                 }
                 m_dirtyPages = true; //new pages means we need to resort
-                
-                ExperimentsResultDialog.Instance.pages.Clear();
+
+                //get rid of original dialog
                 Destroy(ExperimentsResultDialog.Instance.gameObject); //1 frame up still...ehh
             }
 
@@ -768,28 +762,10 @@ namespace WhichData
                             m_selectedPages.Add(first);
                         }
                     }
-
-                    //TODOJEFFGIFFEN possibly use GUIStyle down state clone to highlight selected list row
                 }
 
-                //prev next buttons
-                //HACKJEFFGIFFEN
-                /*if (m_prevBtDown || m_nextBtDown)
+                //list click handling
                 {
-                    int pageIndex = m_dataPages.IndexOf(m_curPg);
-                    if (m_prevBtDown) { pageIndex -= 1; }
-                    if (m_nextBtDown) { pageIndex += 1; }
-
-                    //mod on size, guard against negative
-                    pageIndex %= m_dataPages.Count();
-                    if ( pageIndex < 0 ) { pageIndex += m_dataPages.Count(); }
-
-                    m_curPg = m_dataPages[pageIndex];
-                }
-                else
-                */
-                {
-                    //page buttons
                     foreach (DataPage page in m_dataPages)
                     {
                         if (page.m_rowButton)
@@ -827,8 +803,80 @@ namespace WhichData
                     }
                 }
 
-                if ( m_discardBtn )
+                //action button handling
                 {
+                    if (m_closeBtn)
+                    {
+                        //note close means "keep" for everything
+                        foreach (DataPage pg in m_dataPages)
+                        {
+                            pg.m_kspPage.OnKeepData(pg.m_kspPage.pageData);
+                        }
+                        m_dataPages.Clear();
+                        m_selectedPages.Clear();
+
+                        m_closeBtn = false; //clear the button click; stays on forever with no UI pump after this frame
+                    }
+
+                    //HACKJEFFGIFFEN should use reset on showReset bool
+                    if (m_discardBtn)
+                    {
+                        foreach (DataPage pg in m_selectedPages.Reverse<DataPage>())
+                        {
+                            pg.m_kspPage.OnDiscardData( pg.m_kspPage.pageData );
+                            m_dataPages.RemoveAt( pg.m_index ); //and that's why we're removing selectees backwards
+                        }
+                        m_dirtyPages = true;
+                        m_selectedPages.Clear();
+
+                        m_discardBtn = false;
+                    }
+
+                    //move btn
+                    //
+                    
+                    //transmit btn
+                    {
+                        if ( m_transmitBtn )
+                        {
+                            //HACKJEFFGIFFEN observe this smarter w events
+                            List<IScienceDataTransmitter> antennae = FlightGlobals.ActiveVessel.FindPartModulesImplementing<IScienceDataTransmitter>();
+                            if ( antennae.Count > 0 )
+                            {
+                                foreach (DataPage pg in m_selectedPages.Reverse<DataPage>())
+                                {
+                                    pg.m_kspPage.OnTransmitData(pg.m_kspPage.pageData);
+                                    m_dataPages.RemoveAt(pg.m_index);
+                                }
+                                m_dirtyPages = true;
+                                m_selectedPages.Clear();
+
+                                m_transmitBtn = false;
+                            }
+                            else{ Debug.Log("GA no antennae" ); }
+                        }
+                    }
+
+                    //lab button
+                    {
+                        //HACKJEFFGIFFEN
+                        //true == CAN copy
+                        //ModuleScienceLab.IsLabData( FlightGlobals.ActiveVessel, pg.m_kspPage.pageData ).ToString();
+
+                        if (m_labBtn)
+                        {
+                            foreach (DataPage pg in m_selectedPages.Reverse<DataPage>())
+                            {
+                                pg.m_kspPage.OnSendToLab(pg.m_kspPage.pageData);
+                                m_dataPages.RemoveAt(pg.m_index);
+                            }
+                            m_dirtyPages = true;
+                            m_selectedPages.Clear();
+
+                            m_labBtn = false;
+                        }
+                    }
+
                 }
 
                 //TODOJEFFGIFFEN
@@ -866,26 +914,6 @@ namespace WhichData
                 Debug.Log("GA rd nxtscivalxmit " + ResearchAndDevelopment.GetNextScienceValue( curPg.dataSize, s, curPg.xmitDataScalar));
                 Debug.Log("GA rd refscival " + ResearchAndDevelopment.GetReferenceDataValue( curPg.dataSize, s));
                 */
-        }
-
-        public delegate Callback<ScienceData> GetKSPDelgt(DataPage pg);
-
-        public Callback<ScienceData> GetDiscardDlgt( DataPage pg ) { return pg.m_kspPage.OnDiscardData; }
-        public Callback<ScienceData> GetKeepDlgt( DataPage pg ) { return pg.m_kspPage.OnKeepData; }
-        public Callback<ScienceData> GetTransmitDlgt( DataPage pg ) { return pg.m_kspPage.OnTransmitData; }
-        public Callback<ScienceData> GetLabDlgt( DataPage pg ) { return pg.m_kspPage.OnSendToLab; } 
-
-        //public void ExecuteAction( GetKSPDelgt getDlgt )
-        public void ExecuteAction( Callback< DataPage> getDlgt)
-        {
-            foreach( DataPage pg in m_selectedPages.Reverse<DataPage>() )
-            {
-                Callback<ScienceData> dlgt = getDlgt( pg );
-                dlgt( pg.m_kspPage.pageData ); //i assume this will remove/etc the ScienceData from the ScienceContainer?
-                m_dataPages.RemoveAt( pg.m_index ); //and that's why we're removing selectees backwards
-            }
-            m_dirtyPages = true;
-            m_selectedPages.Clear();
         }
 
         public void OnDisable()
