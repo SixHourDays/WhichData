@@ -13,6 +13,7 @@ namespace WhichData
         //ksp data
         public ExperimentResultDialogPage m_kspPage;
         public ScienceSubject m_subject;
+        public IScienceDataContainer m_dataModule;
 
         //subjectID parsed
         public string m_experi;
@@ -46,6 +47,8 @@ namespace WhichData
         {
             m_kspPage = page;
             m_subject = ResearchAndDevelopment.GetSubjectByID(m_kspPage.pageData.subjectID);
+            //ModuleScienceContainer and ModuleScienceExperiment subclass this
+            m_dataModule = m_kspPage.host.FindModuleImplementing<IScienceDataContainer>();
 
             //compose data used in row display
             m_rcvrPrcnt = m_kspPage.scienceValue * m_sciHack / m_subject.scienceCap; //shows this experi's value vs max possible
