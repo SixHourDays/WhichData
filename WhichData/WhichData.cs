@@ -21,7 +21,7 @@ namespace WhichData
         public string m_biome;
 
         //hud state
-        public int m_index = 0;
+        public int m_index = 0; //into m_dataPages
         public bool m_rowButton = false;
         public bool m_selected = false;
 
@@ -55,7 +55,7 @@ namespace WhichData
 
             //compose data used in info pane (classic dialog fields)
             m_dataFieldDataMsg = "Data Size: " + m_kspPage.dataSize.ToString("F1") + " Mits";
-            m_dataFieldTrnsWarn = m_kspPage.showTransmitWarning ? "Inoperable after Transmitting." : null;
+            m_dataFieldTrnsWarn = m_kspPage.showTransmitWarning ? "Inoperable after Transmitting." : string.Empty;
             m_rcvrFieldMsg = "Recovery: +" + m_rcvrValue + " Science";
             m_rcvrFieldBackBar = 1.0f - m_subject.science / m_subject.scienceCap; //shows this experi's value when done next time vs max possible
             m_trnsFieldMsg = "Transmit: +" + m_trnsValue + " Science";
@@ -83,7 +83,7 @@ namespace WhichData
                     break;
                 }
             }
-            if (m_body == "")
+            if (m_body == string.Empty)
             {
                 Debug.Log("GA ERROR no body in id " + m_kspPage.pageData.subjectID);
             }
@@ -99,7 +99,7 @@ namespace WhichData
                     break;
                 }
             }
-            if (m_situ == "")
+            if (m_situ == string.Empty)
             {
                 Debug.Log("GA ERROR no situ in id " + m_kspPage.pageData.subjectID);
             }
@@ -225,6 +225,7 @@ namespace WhichData
             //GameEvents.OnExperimentDeployed.Add( ExperimentDeploy );
            // GameEvents.OnScienceChanged.Add( ScienceChange );
            // GameEvents.OnScienceRecieved.Add( ScienceReceive );
+           //HACKJEFFGIFFEN heres where we can sign up for global events, like ship reconfigures...
 
         }
 
@@ -309,14 +310,24 @@ namespace WhichData
         public bool m_closeBtn = false;
         public bool m_moveBtn = false;
         public bool m_discardBtn = false;
-        public bool m_transmitBtn = false;
         public bool m_labBtn = false;
+        public bool m_transmitBtn = false;
 
         public Vector2 m_scrollPos;
         public Texture2D m_dataIcon = null;
         public Texture2D m_scienceIcon = null;
         public GUIStyle m_closeBtnStyle = new GUIStyle();
         public GUIStyle m_moveBtnStyle = new GUIStyle();
+
+        public string m_titleBar;
+        public string m_boxMsg;
+        public delegate void LayoutDlgt();
+        public LayoutDlgt m_layoutInfoPaneBody;
+        public string m_labBtnMsg;
+        public string m_transmitBtnMsg;
+        
+
+
     
         //mod state
         public List<SortField> m_sortFields = new List<SortField>
@@ -330,7 +341,6 @@ namespace WhichData
             new SortField("Celes. Body", DataPage.CmpBody )
         };
         public List<DataPage> m_selectedPages = new List<DataPage>();
-        public bool m_dirtyPages = false;
         public List<DataPage> m_dataPages = new List<DataPage>();
         public RankedSorter m_rankSorter = new RankedSorter();
 
@@ -344,7 +354,7 @@ namespace WhichData
             }
         }
 
-        public delegate void LayoutBodyDlgt();
+
 
         void WindowLayout(int windowID)
         {
@@ -353,40 +363,28 @@ namespace WhichData
 
             GUILayout.BeginArea(m_listPaneRect/*, HighLogic.Skin.window*/);
             {
-                GUILayout.BeginHorizontal();
-                {
-                    //sorter toggles
-                    for ( int i = 0; i < m_sortFields.Count; i++ )
-                    {
-                        SortField sf = m_sortFields[i];
-                        sf.m_guiToggle = GUILayout.Toggle(sf.m_guiToggle, sf.m_text, HighLogic.Skin.button); //want a ksp button not the fat rslt dlg button
-                    }
-                } GUILayout.EndHorizontal();
-
-
-                GUIStyle ngs = new GUIStyle(m_dlgSkin.scrollView); //HACKJEFFGIFFEN
-                ngs.padding = new RectOffset(0, 0, 0, 0); //get rid of stupid left pad
-                m_scrollPos = GUILayout.BeginScrollView(m_scrollPos, ngs);
-                {
-                    foreach (DataPage page in m_dataPages)
-                    {
-                        LayoutListField(page);
-                    }
-                } GUILayout.EndScrollView();
+                LayoutListToggles();
+                LayoutListFields();
 
             } GUILayout.EndArea();
 
             GUILayout.BeginArea(m_infoPaneRect/*, m_dlgSkin.window*/);
             {
-                if (m_selectedPages.Count == 1) //HACKJEFFGIFFEN
+                GUILayout.BeginVertical();
                 {
-                    DataPage curPg = m_selectedPages[0];
-                    LayoutInfoPane( curPg.m_kspPage.title, LayoutBodySingle, curPg.m_labBtnData, curPg.m_transBtnPerc);
-                }
-                else
-                {
-                    LayoutInfoPane( m_selectedPages.Count + " Experiments Selected", LayoutBodyGroup, "lols", "woot" );
-                }
+                    LayoutTitleBar();
+
+                    GUILayout.BeginHorizontal();
+                    {
+                        //Main left column
+                        m_layoutInfoPaneBody();
+
+                        //Rightside button column
+                        LayoutActionButtons();
+
+                    } GUILayout.EndHorizontal();
+
+                } GUILayout.EndVertical();
 
             } GUILayout.EndArea();
 
@@ -394,74 +392,143 @@ namespace WhichData
             GUI.DragWindow();
         }
 
-        public void LayoutBodySingle()
+        public void LayoutListToggles()
         {
-            DataPage curPg = m_selectedPages[0];
-            //the skin's box GUIStyle already has the green text and nice top left align
-            GUILayout.Box(curPg.m_kspPage.resultText);
-
-            LayoutInfoField(curPg);
-            LayoutRecoverScienceBarField(curPg);
-            LayoutTransmitScienceBarField(curPg);
-        }
-
-        public void LayoutBodyGroup()
-        {
-            //the skin's box GUIStyle already has the green text and nice top left align
-            GUILayout.Box("multiselect stats"); //HACKJEFFGIFFEN
-
-            //LayoutInfoField(curPg);
-            //LayoutRecoverScienceBarField(curPg);
-            //LayoutTransmitScienceBarField(curPg);
-        }
-
-        public void LayoutInfoPane( string title, LayoutBodyDlgt dlgt, string labMsg, string trnsMsg )
-        {
-            GUILayout.BeginVertical();
+            GUILayout.BeginHorizontal();
             {
-                LayoutTitleBar( title );
-                GUILayout.Space( 4 ); //HACKJEFFGIFFEN to align with the list pane's top
-
-                GUILayout.BeginHorizontal();
+                //sorter toggles
+                foreach (SortField sf in m_sortFields)
                 {
-                    //Fat left column
-                    GUILayout.BeginVertical(GUILayout.Width(m_leftColumnWidth)); //width of left column from orig dialog
-                    {
-                        dlgt(); //HACKJEFFGIFFEN not..the greatest thing...
-
-                    } GUILayout.EndVertical();
-
-                    //Rightside button column
-                    LayoutActionButtons( labMsg,  trnsMsg );
-
-                } GUILayout.EndHorizontal();
-
-            } GUILayout.EndVertical();
+                    sf.m_guiToggle = GUILayout.Toggle(sf.m_guiToggle, sf.m_text, HighLogic.Skin.button); //want a ksp button not the fat rslt dlg button
+                }
+            } GUILayout.EndHorizontal();
         }
 
-        public void LayoutTitleBar(string title)
+        public void LayoutListFields()
+        {
+            GUIStyle ngs = new GUIStyle(m_dlgSkin.scrollView); //HACKJEFFGIFFEN
+            ngs.padding = new RectOffset(0, 0, 0, 0); //get rid of stupid left pad
+            m_scrollPos = GUILayout.BeginScrollView(m_scrollPos, ngs);
+            {
+                GUIStyle listField = new GUIStyle(m_dlgSkin.box);
+                listField.padding = new RectOffset(0, 0, 0, 0); //nerf padding
+                GUIContent nothing = new GUIContent();
+                Color oldColor = GUI.color;
+                foreach (DataPage pg in m_dataPages)
+                {
+                    GUI.color = pg.m_selected ? Color.yellow : Color.white;
+                    pg.m_rowButton = GUILayout.Button(nothing, listField, GUILayout.MaxHeight(m_listFieldMaxHeight));
+                    Rect btRect = GUILayoutUtility.GetLastRect();
+                    {
+                        //experi, rec sci/%max, trns sci/%max, data mits, biome, sit, body
+                        //not atm lab points, disabling
+                        const int fields = 7; //skip lab pts
+                        float fieldWidth = btRect.width / fields;
+                        Rect walker = btRect;
+                        walker.width = fieldWidth;
+
+                        //experi
+                        GUI.color = Color.white;
+                        GUIStyle cliptext = new GUIStyle(m_styleRfText); //HACKJEFFGIFFEN
+                        cliptext.clipping = TextClipping.Clip;
+                        GUI.Label(walker, pg.m_experi, cliptext);
+                        walker.x += walker.width;
+
+                        //recvr
+                        GUI.color = Color.green;
+                        string recvrString = pg.m_rcvrValue + "/" + (pg.m_rcvrPrcnt * 100).ToString("F0") + "%";
+                        GUI.Label(walker, recvrString, m_styleRfText);
+                        walker.x += walker.width;
+
+                        //trans
+                        GUI.color = Color.cyan;
+                        string trnsString = pg.m_trnsValue + "/" + (pg.m_trnsPrcnt * 100).ToString("F0") + "%";
+                        GUI.Label(walker, trnsString, m_styleRfText);
+                        walker.x += walker.width;
+
+                        //data mits
+                        GUI.color = Color.white;
+                        GUI.Label(walker, pg.m_kspPage.dataSize + " Mits", m_styleRfText);
+                        walker.x += walker.width;
+
+                        //disabling
+                        //GUI.Label(walker, pg.showTransmitWarning ? "Disbl" : "-", m_styleRfText);
+                        //walker.x += walker.width;
+
+                        //biome
+                        GUI.Label(walker, pg.m_biome == string.Empty ? "Global" : pg.m_biome, m_styleRfText);
+                        walker.x += walker.width;
+
+                        //situ
+                        GUI.Label(walker, pg.m_situ, m_styleRfText);
+                        walker.x += walker.width;
+
+                        //body
+                        GUI.Label(walker, pg.m_body, m_styleRfText);
+                        walker.x += walker.width;
+
+                    }
+                }
+                GUI.color = oldColor;
+
+            } GUILayout.EndScrollView();
+        }
+
+        public void LayoutTitleBar()
         {
             GUILayout.BeginHorizontal();
             {
                 //m_prevBtDown = GUILayout.Button("", m_stylePrevPage, GUILayout.Width(m_pageButtonSize), GUILayout.Height(m_pageButtonSize + m_pageButtonPadding));
-                GUILayout.Label(title);
+                GUILayout.Label(m_titleBar);
                 //m_nextBtDown = GUILayout.Button("", m_styleNextPage, GUILayout.Width(m_pageButtonSize), GUILayout.Height(m_pageButtonSize + m_pageButtonPadding));
                 m_closeBtn = GUILayout.Button("", m_closeBtnStyle);
+
             } GUILayout.EndHorizontal();
+            
+            GUILayout.Space(4); //HACKJEFFGIFFEN to align with the list pane's top
         }
 
-        public void LayoutActionButtons( string labMsg, string trnsMsg )
+        public void LayoutActionButtons()
         {
-            GUILayout.BeginVertical();
+            GUILayout.BeginVertical(GUILayout.Width(m_rightSideWidth));
             {
                 //HACKJEFFGIFFEN tooltips missing: old attempts at the tooltips...why dont you love me WHY
                 //GUI.tooltip = "Discard Data";
                 //GUILayout.Button(new GUIContent("", "Discard Data"), m_styleDiscardButton);
                 m_discardBtn = GUILayout.Button("", m_styleDiscardButton);
                 m_moveBtn = GUILayout.Button("", m_moveBtnStyle);
-                m_labBtn = GUILayout.Button( labMsg, m_styleLabButton);
-                m_transmitBtn = GUILayout.Button( trnsMsg, m_styleTransmitButton);
+                m_labBtn = GUILayout.Button(m_labBtnMsg, m_styleLabButton);
+                m_transmitBtn = GUILayout.Button(m_transmitBtnMsg, m_styleTransmitButton);
 
+            } GUILayout.EndVertical();
+        }
+
+        public void LayoutBodySingle()
+        {
+            GUILayout.BeginVertical(/*GUILayout.Width(m_leftColumnWidth)*/); //width of left column from orig dialog
+            {
+                DataPage curPg = m_selectedPages.First();
+                //the skin's box GUIStyle already has the green text and nice top left align
+                GUILayout.Box(m_boxMsg);
+
+                LayoutInfoField(curPg);
+                LayoutRecoverScienceBarField(curPg);
+                LayoutTransmitScienceBarField(curPg);
+
+            } GUILayout.EndVertical();
+        }
+
+        public void LayoutBodyGroup()
+        {
+            GUILayout.BeginVertical(/*GUILayout.Width(m_leftColumnWidth)*/); //width of left column from orig dialog
+            {
+                //the skin's box GUIStyle already has the green text and nice top left align
+                GUILayout.Box(m_boxMsg); //HACKJEFFGIFFEN
+
+                //LayoutInfoField(curPg);
+                //LayoutRecoverScienceBarField(curPg);
+                //LayoutTransmitScienceBarField(curPg);
+            
             } GUILayout.EndVertical();
         }
 
@@ -471,7 +538,7 @@ namespace WhichData
             {
                 GUILayout.Label( m_dataIcon, m_styleRfIcons );
                 GUILayout.Label( page.m_dataFieldDataMsg, m_styleRfText );
-                if (page.m_dataFieldTrnsWarn != null)
+                if (page.m_dataFieldTrnsWarn != string.Empty)
                 {
                     Rect textRect = GUILayoutUtility.GetLastRect();
                     TextAnchor oldAnchor = m_styleRfText.alignment;
@@ -484,6 +551,7 @@ namespace WhichData
 
                     GUI.color = oldColor;
                     m_styleRfText.alignment = oldAnchor;
+                     
                 }
 
             } GUILayout.EndHorizontal();
@@ -510,9 +578,10 @@ namespace WhichData
             {
                 GUILayout.Label( m_scienceIcon, m_styleRfIcons );
                 GUILayout.Label( text, m_styleRfText);
+                Rect textRect = GUILayoutUtility.GetLastRect();                
 
-                Rect textRect = GUILayoutUtility.GetLastRect();
-                Rect totalBar = new Rect( m_leftColumnWidth - m_progressBarWidth - m_barToEndPad, textRect.yMin, m_progressBarWidth, textRect.height );
+                //HACKJEFFGIFFEN 
+                Rect totalBar = new Rect(391 - m_rightSideWidth - m_progressBarWidth - 11/* - m_barToEndPad*/, textRect.yMin, m_progressBarWidth, textRect.height);
                 GUI.Box( totalBar, nothing, m_stylePrgBarBG );
 
                 //the bars need 7/130 or more to draw right (pad for the caps)
@@ -532,65 +601,7 @@ namespace WhichData
             } GUILayout.EndHorizontal();
         }
 
-        public void LayoutListField( DataPage pg )
-        {
-            GUIStyle listField = new GUIStyle( m_dlgSkin.box );
-            listField.padding = new RectOffset(0, 0, 0, 0); //nerf padding
-            GUIContent nothing = new GUIContent();
-            Color oldColor = GUI.color;
-            GUI.color = pg.m_selected ? Color.yellow : Color.white;
-            //GUILayout.BeginHorizontal(m_styleRfBackground);
-            pg.m_rowButton = GUILayout.Button( nothing, listField, GUILayout.MaxHeight(m_listFieldMaxHeight));
-            Rect btRect = GUILayoutUtility.GetLastRect();
-            {
-                //experi, rec sci/%max, trns sci/%max, data mits, biome, sit, body
-                //not atm lab points, disabling
-                const int fields = 7; //skip lab pts
-                float fieldWidth = btRect.width / fields;
-                Rect walker = btRect;
-                walker.width = fieldWidth;
-
-                //experi
-                GUI.color = Color.white;
-                GUI.Label(walker, pg.m_experi, m_styleRfText);
-                walker.x += walker.width;
-
-                //recvr
-                GUI.color = Color.green;
-                string recvrString = pg.m_rcvrValue + "/" + (pg.m_rcvrPrcnt * 100).ToString("F0") + "%";
-                GUI.Label( walker, recvrString, m_styleRfText);
-                walker.x += walker.width;
-
-                //trans
-                GUI.color = Color.cyan;
-                string trnsString = pg.m_trnsValue + "/" + (pg.m_trnsPrcnt * 100).ToString("F0") + "%";
-                GUI.Label(walker, trnsString, m_styleRfText);
-                walker.x += walker.width;
-
-                //data mits
-                GUI.color = Color.white;
-                GUI.Label(walker, pg.m_kspPage.dataSize + " Mits", m_styleRfText);
-                walker.x += walker.width;
-
-                //disabling
-                //GUI.Label(walker, pg.showTransmitWarning ? "Disbl" : "-", m_styleRfText);
-                //walker.x += walker.width;
-
-                //biome
-                GUI.Label(walker, pg.m_biome == string.Empty ? "Global" : pg.m_biome , m_styleRfText);
-                walker.x += walker.width;
-
-                //situ
-                GUI.Label(walker, pg.m_situ, m_styleRfText);
-                walker.x += walker.width;
-
-                //body
-                GUI.Label(walker, pg.m_body, m_styleRfText);
-                walker.x += walker.width;
-
-            }// GUILayout.EndHorizontal();
-            GUI.color = oldColor;
-        }
+        
 
         public void LazyInit()
         {
@@ -645,7 +656,7 @@ namespace WhichData
             m_closeBtnStyle.hover.background = GameDatabase.Instance.GetTexture("SixHourDays/closebtnhover", false);
             m_closeBtnStyle.active.background = GameDatabase.Instance.GetTexture("SixHourDays/closebtndown", false);
 
-            m_moveBtnStyle.margin = new RectOffset(7, 7, 2, 2);
+            m_moveBtnStyle.margin = new RectOffset(7, 1, 2, 2);
             m_moveBtnStyle.fixedWidth = m_moveBtnStyle.fixedHeight = 55.0f;
             m_moveBtnStyle.normal.background = GameDatabase.Instance.GetTexture("SixHourDays/movebtnnormal", false);
             m_moveBtnStyle.hover.background = GameDatabase.Instance.GetTexture("SixHourDays/movebtnhover", false);
@@ -686,6 +697,9 @@ namespace WhichData
 
         public void Update()
         {
+            bool dirtyPages = false;
+            bool dirtySelection = false;
+
             //when dialog is spawned, steal its data and kill it
             if (ExperimentsResultDialog.Instance != null)
             {
@@ -697,7 +711,7 @@ namespace WhichData
                 {
                     m_dataPages.Add(new DataPage(resultPage));
                 }
-                m_dirtyPages = true; //new pages means we need to resort
+                dirtyPages = true; //new pages means we need to resort
 
                 //get rid of original dialog
                 Destroy(ExperimentsResultDialog.Instance.gameObject); //1 frame up still...ehh
@@ -720,7 +734,7 @@ namespace WhichData
                                 m_rankSorter.AddSortField(sf);
                                 sf.m_enabled = false;
                                 sf.m_text = sf.m_text.Insert(0, m_rankSorter.GetTotalRanks().ToString() + "^"); //HACKJEFFGIFFEN shitty arrow
-                                m_dirtyPages = true;
+                                dirtyPages = true;
                             }
                             else
                             {
@@ -730,7 +744,7 @@ namespace WhichData
                                     m_rankSorter.RemoveLastSortField();
                                     sf.m_enabled = true;
                                     sf.m_text = sf.m_text.Remove(0, 2);
-                                    m_dirtyPages = true;
+                                    dirtyPages = true;
                                 }
                                 else //otherwise force toggle to stay on
                                 {
@@ -740,12 +754,11 @@ namespace WhichData
                         }
                     }
 
-                    if (m_dirtyPages)
+                    if (dirtyPages)
                     {
                         //actual sort based on toggle ranks
                         //ok to sort on no criteria
                         m_dataPages.Sort(m_rankSorter);
-                        m_dirtyPages = false;
 
                         //once re-ordered, indices need updating
                         int i = 0;
@@ -754,12 +767,13 @@ namespace WhichData
                             page.m_index = i++;
                         }
 
-                        //if we've never picked a page, default
+                        //if we've never picked a page, default //HACKJEFFGIFFEN put this somewhere less idiotic
                         if (m_selectedPages.Count == 0)
                         {
                             DataPage first = m_dataPages[0];
                             first.m_selected = true;
                             m_selectedPages.Add(first);
+                            dirtySelection = true;
                         }
                     }
                 }
@@ -779,8 +793,8 @@ namespace WhichData
                             //now discern whether click or altclick
                             if (Input.GetKey(KeyCode.LeftAlt) || Input.GetKey(KeyCode.RightAlt))
                             {
-                                int a = m_selectedPages[0].m_index; //smallest selected index 
-                                int b = m_selectedPages[m_selectedPages.Count - 1].m_index; //largest
+                                int a = m_selectedPages.First().m_index; //smallest selected index 
+                                int b = m_selectedPages.Last().m_index; //largest
                                 int c = page.m_index; //brand new index chosen
                                 int start = Math.Min(Math.Min(a, b), c);
                                 int end = Math.Max(Math.Max(a, b), c);
@@ -792,15 +806,56 @@ namespace WhichData
                                 m_selectedPages.Add(page);
                             }
 
-                            //highlight the new
-                            foreach (DataPage newPage in m_selectedPages)
-                            {
-                                newPage.m_selected = true;
-                            }
-
+                            //the newly selected are highlighted in the accumulation loop next
+                            dirtySelection = true;
+                            
                             break;
                         }
                     }
+                }
+                
+                //TODOJEFFGIFFEN
+                //check old page count vs new, removals throw selection dirty too
+
+                //populate info pane
+                if ( dirtySelection )
+                {
+                    //group mode
+                    if (m_selectedPages.Count > 1)
+                    {
+                        m_boxMsg = "";
+                        float labCopyData = 0.0f;
+                        float transmitSci = 0.0f;
+                        foreach (DataPage page in m_selectedPages)
+                        {
+                            page.m_selected = true;
+
+                            m_boxMsg += page.m_kspPage.title + ", ";
+                            labCopyData += page.m_kspPage.labBoost;
+                            transmitSci += page.m_kspPage.transmitValue;
+                            //reset vs delete
+                            //accumulate the lab-viable list
+                        }
+                        m_boxMsg.Remove(m_boxMsg.Length - 2); //trim trailing comma
+
+                        //HACKJEFFGIFFEN tempo el temperson
+                        m_titleBar = m_selectedPages.Count + " Experiments Selected";
+                        m_layoutInfoPaneBody = LayoutBodyGroup;
+                        m_labBtnMsg = "+" + labCopyData.ToString("F0");
+                        m_transmitBtnMsg = "+" + transmitSci.ToString("F1");
+                    }
+                    else //single mode
+                    {
+                        DataPage page = m_selectedPages.First();
+                        page.m_selected = true;
+
+                        m_titleBar = page.m_kspPage.title;
+                        m_boxMsg = page.m_kspPage.resultText;
+                        m_layoutInfoPaneBody = LayoutBodySingle;
+                        m_labBtnMsg = page.m_labBtnData;
+                        m_transmitBtnMsg = page.m_transBtnPerc;
+                    }
+
                 }
 
                 //action button handling
@@ -826,7 +881,6 @@ namespace WhichData
                             pg.m_kspPage.OnDiscardData( pg.m_kspPage.pageData );
                             m_dataPages.RemoveAt( pg.m_index ); //and that's why we're removing selectees backwards
                         }
-                        m_dirtyPages = true;
                         m_selectedPages.Clear();
 
                         m_discardBtn = false;
@@ -840,15 +894,17 @@ namespace WhichData
                         if ( m_transmitBtn )
                         {
                             //HACKJEFFGIFFEN observe this smarter w events
+                            //TODOJEFFGIFFEN what happens on a transmit cut from power?
+                            //TODOJEFFGIFFEN what happens in remotetech?
                             List<IScienceDataTransmitter> antennae = FlightGlobals.ActiveVessel.FindPartModulesImplementing<IScienceDataTransmitter>();
                             if ( antennae.Count > 0 )
                             {
+                                //all experi are transmittable...so just accumulate stats in prev loop
                                 foreach (DataPage pg in m_selectedPages.Reverse<DataPage>())
                                 {
                                     pg.m_kspPage.OnTransmitData(pg.m_kspPage.pageData);
                                     m_dataPages.RemoveAt(pg.m_index);
                                 }
-                                m_dirtyPages = true;
                                 m_selectedPages.Clear();
 
                                 m_transmitBtn = false;
@@ -860,17 +916,19 @@ namespace WhichData
                     //lab button
                     {
                         //HACKJEFFGIFFEN
+                        //i think 1st is only lab that matters.  a docking of 2 together only works the 1st in the tree.
                         //true == CAN copy
                         //ModuleScienceLab.IsLabData( FlightGlobals.ActiveVessel, pg.m_kspPage.pageData ).ToString();
 
                         if (m_labBtn)
                         {
+                            //TODOJEFFGIFFEN loop over to list out viable experi to copy + accumulate stats
+                            //then this loop is on the viable list
                             foreach (DataPage pg in m_selectedPages.Reverse<DataPage>())
                             {
                                 pg.m_kspPage.OnSendToLab(pg.m_kspPage.pageData);
                                 m_dataPages.RemoveAt(pg.m_index);
                             }
-                            m_dirtyPages = true;
                             m_selectedPages.Clear();
 
                             m_labBtn = false;
