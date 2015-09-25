@@ -314,7 +314,9 @@ namespace WhichData
         public bool m_moveBtn = false;
         public bool m_discardBtn = false;
         public bool m_labBtn = false;
+        public bool m_labBtnEnabled = false;
         public bool m_transmitBtn = false;
+        public bool m_transmitBtnEnabled = false;
 
         public Vector2 m_scrollPos;
         public Texture2D m_dataIcon = null;
@@ -500,8 +502,12 @@ namespace WhichData
                 //GUILayout.Button(new GUIContent("", "Discard Data"), m_styleDiscardButton);
                 m_discardBtn = GUILayout.Button("", m_styleDiscardButton);
                 m_moveBtn = GUILayout.Button("", m_moveBtnStyle);
+                Color oldColor = GUI.color;
+                GUI.color = m_labBtnEnabled ? Color.white : Color.grey; //HACKJEFFGIFFEN crap, need a state
                 m_labBtn = GUILayout.Button(m_labBtnMsg, m_styleLabButton);
+                GUI.color = m_transmitBtnEnabled ? Color.white : Color.grey;
                 m_transmitBtn = GUILayout.Button(m_transmitBtnMsg, m_styleTransmitButton);
+                GUI.color = oldColor;
 
             } GUILayout.EndVertical();
         }
@@ -811,41 +817,63 @@ namespace WhichData
 
                             //the newly selected are highlighted in the accumulation loop next
                             dirtySelection = true;
-                            
+
                             break;
                         }
                     }
                 }
-                
+
+                //ship part detection
+                //HACKJEFFGIFFEN observe this smarter w events
+                m_transmitBtnEnabled = FlightGlobals.ActiveVessel.FindPartModulesImplementing<IScienceDataTransmitter>().Count() > 0;
+
                 //TODOJEFFGIFFEN
                 //check old page count vs new, removals throw selection dirty too
 
                 //populate info pane
-                if ( dirtySelection )
+                if (dirtySelection)
                 {
                     //group mode
                     if (m_selectedPages.Count > 1)
                     {
-                        m_boxMsg = "";
+                        float recoverSci = 0.0f;
+                        int resetable = 0;
+                        int labAble = 0;
                         float labCopyData = 0.0f;
+                        float transmitAvg = 0.0f;
                         float transmitSci = 0.0f;
                         foreach (DataPage page in m_selectedPages)
                         {
                             page.m_selected = true;
 
-                            m_boxMsg += page.m_kspPage.title + ", ";
-                            labCopyData += page.m_kspPage.labBoost;
-                            transmitSci += page.m_kspPage.transmitValue;
-                            //reset vs delete
-                            //accumulate the lab-viable list
-                        }
-                        m_boxMsg.Remove(m_boxMsg.Length - 2); //trim trailing comma
+                            recoverSci += page.m_kspPage.scienceValue;
 
-                        //HACKJEFFGIFFEN tempo el temperson
+                            if (page.m_kspPage.showReset) { resetable += 1; }
+                            if (page.m_kspPage.showLabOption)
+                            {
+                                labAble += 1;
+                                labCopyData += page.m_kspPage.pageData.labValue;
+                            }
+
+                            transmitAvg += page.m_kspPage.xmitDataScalar * 100.0f;
+                            transmitSci += page.m_kspPage.transmitValue;
+                        }
+                        transmitAvg /= m_selectedPages.Count();
+
+                        //layout info pane stats
                         m_titleBar = m_selectedPages.Count + " Experiments Selected";
+                        
+                        m_boxMsg = 
+                            recoverSci.ToString("F1") + "pts recoverable science onboard!\n" +
+                            (m_selectedPages.Count() - resetable) + " can discard, " + resetable + " can reset.\n" + 
+                            labAble + "/" + m_selectedPages.Count() + " experiments available for lab copy.\n" + 
+                            transmitSci.ToString("F1") + "pts via transmitting science.";
                         m_layoutInfoPaneBody = LayoutBodyGroup;
+                        
                         m_labBtnMsg = "+" + labCopyData.ToString("F0");
-                        m_transmitBtnMsg = "+" + transmitSci.ToString("F1");
+                        m_labBtnEnabled = labAble > 0;
+
+                        m_transmitBtnMsg = transmitAvg.ToString("F0") + "%";
                     }
                     else //single mode
                     {
@@ -856,6 +884,7 @@ namespace WhichData
                         m_boxMsg = page.m_kspPage.resultText;
                         m_layoutInfoPaneBody = LayoutBodySingle;
                         m_labBtnMsg = page.m_labBtnData;
+                        m_labBtnEnabled = page.m_kspPage.showLabOption;
                         m_transmitBtnMsg = page.m_transBtnPerc;
                     }
 
@@ -881,40 +910,29 @@ namespace WhichData
                     {
                         foreach (DataPage pg in m_selectedPages.Reverse<DataPage>())
                         {
-                            pg.m_kspPage.OnDiscardData( pg.m_kspPage.pageData );
-                            m_dataPages.RemoveAt( pg.m_index ); //and that's why we're removing selectees backwards
+                            pg.m_kspPage.OnDiscardData(pg.m_kspPage.pageData);
+                            m_dataPages.RemoveAt(pg.m_index); //and that's why we're removing selectees backwards
                         }
                         m_selectedPages.Clear();
+                        //HACKJEFFGIFFEN need a pump on the selection being dirty next frame
 
                         m_discardBtn = false;
                     }
 
                     //move btn
+                    //HACKJEFFGIFFEN
+                    /* //old normal based highlight
+                     * page.m_kspPage.host.SetHighlightType(Part.HighlightType.AlwaysOn);
+                     * page.m_kspPage.host.SetHighlightColor( Color.magenta );
+                     * page.m_kspPage.host.SetHighlight( true, false );
+                     * 
+                     * //PPFX glow edge highlight
+                     * HighlightingSystem.Highlighter hl = page.m_kspPage.host.FindModelTransform("model").gameObject.GetComponent<HighlightingSystem.Highlighter>();
+                     * if (hl == null) { hl = page.m_kspPage.host.FindModelTransform("model").gameObject.AddComponent<HighlightingSystem.Highlighter>(); }
+                     * hl.ConstantOn(Color.magenta);
+                     * hl.SeeThroughOn();
+                     */
                     //
-                    
-                    //transmit btn
-                    {
-                        if ( m_transmitBtn )
-                        {
-                            //HACKJEFFGIFFEN observe this smarter w events
-                            //TODOJEFFGIFFEN what happens on a transmit cut from power?
-                            //TODOJEFFGIFFEN what happens in remotetech?
-                            List<IScienceDataTransmitter> antennae = FlightGlobals.ActiveVessel.FindPartModulesImplementing<IScienceDataTransmitter>();
-                            if ( antennae.Count > 0 )
-                            {
-                                //all experi are transmittable...so just accumulate stats in prev loop
-                                foreach (DataPage pg in m_selectedPages.Reverse<DataPage>())
-                                {
-                                    pg.m_kspPage.OnTransmitData(pg.m_kspPage.pageData);
-                                    m_dataPages.RemoveAt(pg.m_index);
-                                }
-                                m_selectedPages.Clear();
-
-                                m_transmitBtn = false;
-                            }
-                            else{ Debug.Log("GA no antennae" ); }
-                        }
-                    }
 
                     //lab button
                     {
@@ -923,7 +941,7 @@ namespace WhichData
                         //true == CAN copy
                         //ModuleScienceLab.IsLabData( FlightGlobals.ActiveVessel, pg.m_kspPage.pageData ).ToString();
 
-                        if (m_labBtn)
+                        /*if (m_labBtn)
                         {
                             //TODOJEFFGIFFEN loop over to list out viable experi to copy + accumulate stats
                             //then this loop is on the viable list
@@ -933,8 +951,35 @@ namespace WhichData
                                 m_dataPages.RemoveAt(pg.m_index);
                             }
                             m_selectedPages.Clear();
+                            //HACKJEFFGIFFEN need a pump on the selection being dirty next frame
 
                             m_labBtn = false;
+                        }
+                         * */
+                    }
+
+                    //transmit btn
+                    {
+                        if (m_transmitBtn)
+                        {
+                            if (m_transmitBtnEnabled)
+                            {
+                                //TODOJEFFGIFFEN what happens on a transmit cut from power?
+                                //TODOJEFFGIFFEN what happens in remotetech?
+                                foreach (DataPage pg in m_selectedPages.Reverse<DataPage>())
+                                {
+                                    pg.m_kspPage.OnTransmitData(pg.m_kspPage.pageData);
+                                    m_dataPages.RemoveAt(pg.m_index);
+                                }
+                                m_selectedPages.Clear();
+                                //HACKJEFFGIFFEN need a pump on the selection being dirty next frame
+
+                                m_transmitBtn = false;
+                            }
+                            else
+                            {   //forced off as we're ghosted
+                                m_transmitBtn = false;
+                            }
                         }
                     }
 
