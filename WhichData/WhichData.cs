@@ -345,7 +345,9 @@ namespace WhichData
             new SortField("Situation", DataPage.CmpSitu ),
             new SortField("Celes. Body", DataPage.CmpBody )
         };
+        bool m_dirtySelection = false;
         public List<DataPage> m_selectedPages = new List<DataPage>();
+        bool m_dirtyPages = false;
         public List<DataPage> m_dataPages = new List<DataPage>();
         public RankedSorter m_rankSorter = new RankedSorter();
 
@@ -702,12 +704,10 @@ namespace WhichData
             */
         }
 
-        
 
         public void Update()
         {
-            bool dirtyPages = false;
-            bool dirtySelection = false;
+
 
             //when dialog is spawned, steal its data and kill it
             if (ExperimentsResultDialog.Instance != null)
@@ -720,7 +720,7 @@ namespace WhichData
                 {
                     m_dataPages.Add(new DataPage(resultPage));
                 }
-                dirtyPages = true; //new pages means we need to resort
+                m_dirtyPages = true; //new pages means we need to resort
 
                 //get rid of original dialog
                 Destroy(ExperimentsResultDialog.Instance.gameObject); //1 frame up still...ehh
@@ -743,7 +743,7 @@ namespace WhichData
                                 m_rankSorter.AddSortField(sf);
                                 sf.m_enabled = false;
                                 sf.m_text = sf.m_text.Insert(0, m_rankSorter.GetTotalRanks().ToString() + "^"); //HACKJEFFGIFFEN shitty arrow
-                                dirtyPages = true;
+                                m_dirtyPages = true;
                             }
                             else
                             {
@@ -753,7 +753,7 @@ namespace WhichData
                                     m_rankSorter.RemoveLastSortField();
                                     sf.m_enabled = true;
                                     sf.m_text = sf.m_text.Remove(0, 2);
-                                    dirtyPages = true;
+                                    m_dirtyPages = true;
                                 }
                                 else //otherwise force toggle to stay on
                                 {
@@ -763,7 +763,7 @@ namespace WhichData
                         }
                     }
 
-                    if (dirtyPages)
+                    if (m_dirtyPages)
                     {
                         //actual sort based on toggle ranks
                         //ok to sort on no criteria
@@ -776,15 +776,17 @@ namespace WhichData
                             page.m_index = i++;
                         }
 
-                        //if we've never picked a page, default //HACKJEFFGIFFEN put this somewhere less idiotic
-                        if (m_selectedPages.Count == 0)
-                        {
-                            DataPage first = m_dataPages[0];
-                            first.m_selected = true;
-                            m_selectedPages.Add(first);
-                            dirtySelection = true;
-                        }
+                        m_dirtyPages = false;
                     }
+                }
+
+                //if we've never picked a page, default //HACKJEFFGIFFEN put this somewhere less idiotic
+                if (m_selectedPages.Count == 0)
+                {
+                    DataPage first = m_dataPages[0];
+                    first.m_selected = true;
+                    m_selectedPages.Add(first);
+                    m_dirtySelection = true;
                 }
 
                 //list click handling
@@ -816,7 +818,7 @@ namespace WhichData
                             }
 
                             //the newly selected are highlighted in the accumulation loop next
-                            dirtySelection = true;
+                            m_dirtySelection = true;
 
                             break;
                         }
@@ -831,7 +833,7 @@ namespace WhichData
                 //check old page count vs new, removals throw selection dirty too
 
                 //populate info pane
-                if (dirtySelection)
+                if (m_dirtySelection)
                 {
                     //group mode
                     if (m_selectedPages.Count > 1)
@@ -844,7 +846,7 @@ namespace WhichData
                         float transmitSci = 0.0f;
                         foreach (DataPage page in m_selectedPages)
                         {
-                            page.m_selected = true;
+                            page.m_selected = true; //newly selected pages need highlighted
 
                             recoverSci += page.m_kspPage.scienceValue;
 
@@ -865,7 +867,7 @@ namespace WhichData
                         
                         m_boxMsg = 
                             recoverSci.ToString("F1") + "pts recoverable science onboard!\n" +
-                            (m_selectedPages.Count() - resetable) + " can discard, " + resetable + " can reset.\n" + 
+                            (m_selectedPages.Count() - resetable) + " can discard, " + resetable + " can reset.\n" +
                             labAble + "/" + m_selectedPages.Count() + " experiments available for lab copy.\n" + 
                             transmitSci.ToString("F1") + "pts via transmitting science.";
                         m_layoutInfoPaneBody = LayoutBodyGroup;
@@ -888,6 +890,7 @@ namespace WhichData
                         m_transmitBtnMsg = page.m_transBtnPerc;
                     }
 
+                    m_dirtySelection = false;
                 }
 
                 //action button handling
@@ -900,7 +903,9 @@ namespace WhichData
                             pg.m_kspPage.OnKeepData(pg.m_kspPage.pageData);
                         }
                         m_dataPages.Clear();
+                        m_dirtyPages = true;
                         m_selectedPages.Clear();
+                        m_dirtySelection = true;
 
                         m_closeBtn = false; //clear the button click; stays on forever with no UI pump after this frame
                     }
@@ -913,8 +918,9 @@ namespace WhichData
                             pg.m_kspPage.OnDiscardData(pg.m_kspPage.pageData);
                             m_dataPages.RemoveAt(pg.m_index); //and that's why we're removing selectees backwards
                         }
+                        m_dirtyPages = true; //removed some, need to re-index remaining
                         m_selectedPages.Clear();
-                        //HACKJEFFGIFFEN need a pump on the selection being dirty next frame
+                        m_dirtySelection = true; //need to default select, and update info pane
 
                         m_discardBtn = false;
                     }
@@ -941,21 +947,35 @@ namespace WhichData
                         //true == CAN copy
                         //ModuleScienceLab.IsLabData( FlightGlobals.ActiveVessel, pg.m_kspPage.pageData ).ToString();
 
-                        /*if (m_labBtn)
+                        if (m_labBtn)
                         {
-                            //TODOJEFFGIFFEN loop over to list out viable experi to copy + accumulate stats
-                            //then this loop is on the viable list
+                            //note, stock ksp disappears the data while its copying, and respawns the dialog with the post-copy result.
+                            List<int> labCopyIndices = new List<int>();
+                            int ri = m_selectedPages.Count() - 1;
                             foreach (DataPage pg in m_selectedPages.Reverse<DataPage>())
                             {
-                                pg.m_kspPage.OnSendToLab(pg.m_kspPage.pageData);
-                                m_dataPages.RemoveAt(pg.m_index);
+                                //partial selection can happen for lab copies
+                                if (pg.m_kspPage.showLabOption)
+                                {
+                                    try { pg.m_kspPage.OnSendToLab(pg.m_kspPage.pageData); }
+                                    catch {} //the callback tries to dismiss the murdered ExperimentsResultDialog here, can't do much but catch.
+
+                                    m_dataPages.RemoveAt(pg.m_index);
+                                    labCopyIndices.Add(ri); //collect for later deletion
+                                }
+                                ri -= 1;
                             }
-                            m_selectedPages.Clear();
-                            //HACKJEFFGIFFEN need a pump on the selection being dirty next frame
+                            m_dirtyPages = true; //removed some, need to re-index remaining
+
+                            foreach (int indexToDel in labCopyIndices)
+                            {
+                                m_selectedPages.RemoveAt(indexToDel); //reverse removal just like above
+                            }
+                            m_dirtySelection = true; //some/none may remain, so possible default select, & update info pane regardless
 
                             m_labBtn = false;
                         }
-                         * */
+                        
                     }
 
                     //transmit btn
@@ -971,13 +991,14 @@ namespace WhichData
                                     pg.m_kspPage.OnTransmitData(pg.m_kspPage.pageData);
                                     m_dataPages.RemoveAt(pg.m_index);
                                 }
+                                m_dirtyPages = true; //removed some need to re-index remaining
                                 m_selectedPages.Clear();
-                                //HACKJEFFGIFFEN need a pump on the selection being dirty next frame
+                                m_dirtySelection = true; //need to default select, and update info pane
 
                                 m_transmitBtn = false;
                             }
                             else
-                            {   //forced off as we're ghosted
+                            {   //forced off as we're ghosted //HACKJEFFGIFFEN bogus doesnt force jack all
                                 m_transmitBtn = false;
                             }
                         }
