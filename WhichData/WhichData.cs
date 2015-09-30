@@ -943,14 +943,12 @@ namespace WhichData
                                 //it is very easy to have a partial selection with lots of src==dst in it.
                                 if (page.m_kspPage.host != hackOldHighlightPart)
                                 {
-                                    ScienceData data = page.m_kspPage.pageData;
-                                    IScienceDataContainer src = (IScienceDataContainer)page.m_kspPage.host.GetComponent(typeof(IScienceDataContainer));
-                                    //all destinations will have ModuleScienceContainer modules
+                                    //all destinations will have ModuleScienceContainer modules (dst cannot be experi)
                                     ModuleScienceContainer dst = hackOldHighlightPart.GetComponent<ModuleScienceContainer>();
 
-                                    src.DumpData(data);
-                                    dst.AddData(data);
-                                    dst.ReviewDataItem(data); //create new entry to replace the old
+                                    page.m_dataModule.DumpData(page.m_kspPage.pageData);
+                                    dst.AddData(page.m_kspPage.pageData);
+                                    dst.ReviewDataItem(page.m_kspPage.pageData); //create new entry to replace the old
 
                                     m_dataPages.RemoveAt(page.m_index);
                                     deadSelectIndices.Add(ri); //collect for later deletion
