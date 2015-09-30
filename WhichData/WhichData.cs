@@ -931,83 +931,124 @@ namespace WhichData
                     }
 
                     //move btn
+                    if (m_moveBtn)
                     {
-                        //iterate selectees, skip those with dst == src (can easily happen), then dst.StoreData( List( src ), dumpRepeats? ) or AddData
-
-                    //HACKJEFFGIFFEN
-                    /* //old normal based highlight
-                     * page.m_kspPage.host.SetHighlightType(Part.HighlightType.AlwaysOn);
-                     * page.m_kspPage.host.SetHighlightColor( Color.magenta );
-                     * page.m_kspPage.host.SetHighlight( true, false );
-                     * 
-                     * //PPFX glow edge highlight
-                     * HighlightingSystem.Highlighter hl = page.m_kspPage.host.FindModelTransform("model").gameObject.GetComponent<HighlightingSystem.Highlighter>();
-                     * if (hl == null) { hl = page.m_kspPage.host.FindModelTransform("model").gameObject.AddComponent<HighlightingSystem.Highlighter>(); }
-                     * hl.ConstantOn(Color.magenta);
-                     * hl.SeeThroughOn();
-                     */
-
-                        //HACKJEFFGIFFEN demo mouse to part w highlight
-                        Ray hoverRay = Camera.main.ScreenPointToRay(Input.mousePosition);
-                        RaycastHit hit;
-                        bool strike = Physics.Raycast(hoverRay, out hit, 1000.0f, 1<<0); //1km length.  Note ship parts are on layer 0, mask needs to be 1<<layer desired
-                        if (strike)
+                        if (m_moveBtnEnabled)
                         {
-                            Part part = hit.collider.gameObject.GetComponentInParent<Part>(); //the collider is a subgameobject of the partmodule's gameobject
-
-                            if (hackOldHighlightPart != null && hackOldHighlightPart != part)
+                            List<int> deadSelectIndices = new List<int>();
+                            int ri = m_selectedPages.Count() - 1;
+                            //HACKJEFFGIFFEN use the oldPartHighlight for now
+                            foreach (DataPage page in m_selectedPages.Reverse<DataPage>())
                             {
-                                HighlightingSystem.Highlighter hl = hackOldHighlightPart.FindModelTransform("model").gameObject.GetComponent<HighlightingSystem.Highlighter>();
-                                hl.ConstantOff();
+                                //it is very easy to have a partial selection with lots of src==dst in it.
+                                if (page.m_kspPage.host != hackOldHighlightPart)
+                                {
+                                    ScienceData data = page.m_kspPage.pageData;
+                                    IScienceDataContainer src = (IScienceDataContainer)page.m_kspPage.host.GetComponent(typeof(IScienceDataContainer));
+                                    //all destinations will have ModuleScienceContainer modules
+                                    ModuleScienceContainer dst = hackOldHighlightPart.GetComponent<ModuleScienceContainer>();
+
+                                    src.DumpData(data);
+                                    dst.AddData(data);
+                                    dst.ReviewDataItem(data); //create new entry to replace the old
+
+                                    m_dataPages.RemoveAt(page.m_index);
+                                    deadSelectIndices.Add(ri); //collect for later deletion
+                                }
+                                ri -= 1;
                             }
+                            m_dirtyPages = true; //removed some, need to re-index remaining
 
-                            GameObject go = part.FindModelTransform("model").gameObject;
-                            HighlightingSystem.Highlighter hl2 = go.GetComponent<HighlightingSystem.Highlighter>();
-                            if (hl2 == null) { hl2 = go.AddComponent<HighlightingSystem.Highlighter>(); }
-                            hl2.ConstantOn(Color.cyan);
+                            foreach (int indexToDel in deadSelectIndices)
+                            {
+                                m_selectedPages.RemoveAt(indexToDel); //reverse removal just like above
+                            }
+                            m_dirtySelection = true; //some/none may remain, so possible default select, & update info pane regardless
 
-                            hackOldHighlightPart = part;
+                            //HACKJEFFGIFFEN //HACKJEFFGIFFEN //HACKJEFFGIFFEN fix the null?
+                            if (m_selectedPages.Count == 0 && m_dataPages.Count > 0)
+                            {
+                                DataPage first = m_dataPages[0];
+                                first.m_selected = true;
+                                m_selectedPages.Add(first);
+                            }
+                        }
+                        else
+                        {
+                            //some button disable jazz
                         }
                     }
-                    //
+                    
+                    //HACKJEFFGIFFEN
+                    /* //old normal based highlight
+                    * page.m_kspPage.host.SetHighlightType(Part.HighlightType.AlwaysOn);
+                    * page.m_kspPage.host.SetHighlightColor( Color.magenta );
+                    * page.m_kspPage.host.SetHighlight( true, false );
+                    * 
+                    * //PPFX glow edge highlight
+                    * HighlightingSystem.Highlighter hl = page.m_kspPage.host.FindModelTransform("model").gameObject.GetComponent<HighlightingSystem.Highlighter>();
+                    * if (hl == null) { hl = page.m_kspPage.host.FindModelTransform("model").gameObject.AddComponent<HighlightingSystem.Highlighter>(); }
+                    * hl.ConstantOn(Color.magenta);
+                    * hl.SeeThroughOn();
+                    */
+
+                    //HACKJEFFGIFFEN demo mouse to part w highlight
+                    Ray hoverRay = Camera.main.ScreenPointToRay(Input.mousePosition);
+                    RaycastHit hit;
+                    bool strike = Physics.Raycast(hoverRay, out hit, 1000.0f, 1<<0); //1km length.  Note ship parts are on layer 0, mask needs to be 1<<layer desired
+                    if (strike)
+                    {
+                        Part part = hit.collider.gameObject.GetComponentInParent<Part>(); //the collider is a subgameobject of the partmodule's gameobject
+
+                        if (hackOldHighlightPart != null && hackOldHighlightPart != part)
+                        {
+                            HighlightingSystem.Highlighter hl = hackOldHighlightPart.FindModelTransform("model").gameObject.GetComponent<HighlightingSystem.Highlighter>();
+                            hl.ConstantOff();
+                        }
+
+                        GameObject go = part.FindModelTransform("model").gameObject;
+                        HighlightingSystem.Highlighter hl2 = go.GetComponent<HighlightingSystem.Highlighter>();
+                        if (hl2 == null) { hl2 = go.AddComponent<HighlightingSystem.Highlighter>(); }
+                        hl2.ConstantOn(Color.cyan);
+
+                        hackOldHighlightPart = part;
+                    }
 
                     //lab button
+                    //HACKJEFFGIFFEN
+                    //i think 1st is only lab that matters.  a docking of 2 together only works the 1st in the tree.
+                    //true == CAN copy
+                    //ModuleScienceLab.IsLabData( FlightGlobals.ActiveVessel, pg.m_kspPage.pageData ).ToString();
+
+                    if (m_labBtn)
                     {
-                        //HACKJEFFGIFFEN
-                        //i think 1st is only lab that matters.  a docking of 2 together only works the 1st in the tree.
-                        //true == CAN copy
-                        //ModuleScienceLab.IsLabData( FlightGlobals.ActiveVessel, pg.m_kspPage.pageData ).ToString();
-
-                        if (m_labBtn)
+                        if (m_labBtnEnabled)
                         {
-                            if (m_labBtnEnabled)
+                            //note, stock ksp disappears the data while its copying, and respawns the dialog with the post-copy result.
+                            List<int> deadSelectIndices = new List<int>();
+                            int ri = m_selectedPages.Count() - 1;
+                            foreach (DataPage pg in m_selectedPages.Reverse<DataPage>())
                             {
-                                //note, stock ksp disappears the data while its copying, and respawns the dialog with the post-copy result.
-                                List<int> labCopyIndices = new List<int>();
-                                int ri = m_selectedPages.Count() - 1;
-                                foreach (DataPage pg in m_selectedPages.Reverse<DataPage>())
+                                //partial selection can happen for lab copies
+                                if (pg.m_kspPage.showLabOption)
                                 {
-                                    //partial selection can happen for lab copies
-                                    if (pg.m_kspPage.showLabOption)
-                                    {
-                                        try { pg.m_kspPage.OnSendToLab(pg.m_kspPage.pageData); }
-                                        catch { } //the callback tries to dismiss the murdered ExperimentsResultDialog here, can't do much but catch.
+                                    try { pg.m_kspPage.OnSendToLab(pg.m_kspPage.pageData); }
+                                    catch { } //the callback tries to dismiss the murdered ExperimentsResultDialog here, can't do much but catch.
 
-                                        m_dataPages.RemoveAt(pg.m_index);
-                                        labCopyIndices.Add(ri); //collect for later deletion
-                                    }
-                                    ri -= 1;
+                                    m_dataPages.RemoveAt(pg.m_index);
+                                    deadSelectIndices.Add(ri); //collect for later deletion
                                 }
-                                m_dirtyPages = true; //removed some, need to re-index remaining
-
-                                foreach (int indexToDel in labCopyIndices)
-                                {
-                                    m_selectedPages.RemoveAt(indexToDel); //reverse removal just like above
-                                }
-                                m_dirtySelection = true; //some/none may remain, so possible default select, & update info pane regardless
-
-                                m_labBtn = false;
+                                ri -= 1;
                             }
+                            m_dirtyPages = true; //removed some, need to re-index remaining
+
+                            foreach (int indexToDel in deadSelectIndices)
+                            {
+                                m_selectedPages.RemoveAt(indexToDel); //reverse removal just like above
+                            }
+                            m_dirtySelection = true; //some/none may remain, so possible default select, & update info pane regardless
+
+                            m_labBtn = false;
                         }
                     }
 
