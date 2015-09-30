@@ -311,8 +311,9 @@ namespace WhichData
         public bool m_prevBtDown = false;
         public bool m_nextBtDown = false;
         public bool m_closeBtn = false;
-        public bool m_moveBtn = false;
         public bool m_discardBtn = false;
+        public bool m_moveBtn = false;
+        public bool m_moveBtnEnabled = false;
         public bool m_labBtn = false;
         public bool m_labBtnEnabled = false;
         public bool m_transmitBtn = false;
@@ -503,11 +504,12 @@ namespace WhichData
                 //GUI.tooltip = "Discard Data";
                 //GUILayout.Button(new GUIContent("", "Discard Data"), m_styleDiscardButton);
                 m_discardBtn = GUILayout.Button("", m_styleDiscardButton);
-                m_moveBtn = GUILayout.Button("", m_moveBtnStyle);
                 Color oldColor = GUI.color;
+                GUI.color = m_moveBtnEnabled ? Color.white : Color.grey; //HACKJEFFGIFFEN crap, need a state
+                m_moveBtn = GUILayout.Button("", m_moveBtnStyle);
                 GUI.color = m_labBtnEnabled ? Color.white : Color.grey; //HACKJEFFGIFFEN crap, need a state
                 m_labBtn = GUILayout.Button(m_labBtnMsg, m_styleLabButton);
-                GUI.color = m_transmitBtnEnabled ? Color.white : Color.grey;
+                GUI.color = m_transmitBtnEnabled ? Color.white : Color.grey; //HACKJEFFGIFFEN crap, need a state
                 m_transmitBtn = GUILayout.Button(m_transmitBtnMsg, m_styleTransmitButton);
                 GUI.color = oldColor;
 
@@ -704,6 +706,7 @@ namespace WhichData
             */
         }
 
+        Part hackOldHighlightPart = null; //HACKJEFFGIFFEN remove
 
         public void Update()
         {
@@ -828,9 +831,7 @@ namespace WhichData
                 //ship part detection
                 //HACKJEFFGIFFEN observe this smarter w events
                 m_transmitBtnEnabled = FlightGlobals.ActiveVessel.FindPartModulesImplementing<IScienceDataTransmitter>().Count() > 0;
-
-                //TODOJEFFGIFFEN
-                //check old page count vs new, removals throw selection dirty too
+                List<ModuleScienceContainer> containerParts = FlightGlobals.ActiveVessel.FindPartModulesImplementing<ModuleScienceContainer>();
 
                 //populate info pane
                 if (m_dirtySelection)
@@ -871,9 +872,12 @@ namespace WhichData
                             labAble + "/" + m_selectedPages.Count() + " experiments available for lab copy.\n" + 
                             transmitSci.ToString("F1") + "pts via transmitting science.";
                         m_layoutInfoPaneBody = LayoutBodyGroup;
-                        
-                        m_labBtnMsg = "+" + labCopyData.ToString("F0");
+
+                        m_moveBtnEnabled = (resetable > 0 && containerParts.Count() > 0);                               //experi result -> pod data
+                        m_moveBtnEnabled |= (m_selectedPages.Count() - resetable) > 0 && containerParts.Count() > 1;    //pod1 data -> pod2 data
+
                         m_labBtnEnabled = labAble > 0;
+                        m_labBtnMsg = m_labBtnEnabled ? "+" + labCopyData.ToString("F0") : "0";
 
                         m_transmitBtnMsg = transmitAvg.ToString("F0") + "%";
                     }
@@ -885,8 +889,9 @@ namespace WhichData
                         m_titleBar = page.m_kspPage.title;
                         m_boxMsg = page.m_kspPage.resultText;
                         m_layoutInfoPaneBody = LayoutBodySingle;
-                        m_labBtnMsg = page.m_labBtnData;
+                        m_moveBtnEnabled = containerParts.Count() > (page.m_kspPage.showReset ? 0 : 1); //experi result need 1 container to move to, intercontainer needs 2
                         m_labBtnEnabled = page.m_kspPage.showLabOption;
+                        m_labBtnMsg = m_labBtnEnabled ? page.m_labBtnData : "0";
                         m_transmitBtnMsg = page.m_transBtnPerc;
                     }
 
@@ -926,6 +931,9 @@ namespace WhichData
                     }
 
                     //move btn
+                    {
+                        //iterate selectees, skip those with dst == src (can easily happen), then dst.StoreData( List( src ), dumpRepeats? ) or AddData
+
                     //HACKJEFFGIFFEN
                     /* //old normal based highlight
                      * page.m_kspPage.host.SetHighlightType(Part.HighlightType.AlwaysOn);
@@ -938,6 +946,29 @@ namespace WhichData
                      * hl.ConstantOn(Color.magenta);
                      * hl.SeeThroughOn();
                      */
+
+                        //HACKJEFFGIFFEN demo mouse to part w highlight
+                        Ray hoverRay = Camera.main.ScreenPointToRay(Input.mousePosition);
+                        RaycastHit hit;
+                        bool strike = Physics.Raycast(hoverRay, out hit, 1000.0f, 1<<0); //1km length.  Note ship parts are on layer 0, mask needs to be 1<<layer desired
+                        if (strike)
+                        {
+                            Part part = hit.collider.gameObject.GetComponentInParent<Part>(); //the collider is a subgameobject of the partmodule's gameobject
+
+                            if (hackOldHighlightPart != null && hackOldHighlightPart != part)
+                            {
+                                HighlightingSystem.Highlighter hl = hackOldHighlightPart.FindModelTransform("model").gameObject.GetComponent<HighlightingSystem.Highlighter>();
+                                hl.ConstantOff();
+                            }
+
+                            GameObject go = part.FindModelTransform("model").gameObject;
+                            HighlightingSystem.Highlighter hl2 = go.GetComponent<HighlightingSystem.Highlighter>();
+                            if (hl2 == null) { hl2 = go.AddComponent<HighlightingSystem.Highlighter>(); }
+                            hl2.ConstantOn(Color.cyan);
+
+                            hackOldHighlightPart = part;
+                        }
+                    }
                     //
 
                     //lab button
@@ -949,33 +980,35 @@ namespace WhichData
 
                         if (m_labBtn)
                         {
-                            //note, stock ksp disappears the data while its copying, and respawns the dialog with the post-copy result.
-                            List<int> labCopyIndices = new List<int>();
-                            int ri = m_selectedPages.Count() - 1;
-                            foreach (DataPage pg in m_selectedPages.Reverse<DataPage>())
+                            if (m_labBtnEnabled)
                             {
-                                //partial selection can happen for lab copies
-                                if (pg.m_kspPage.showLabOption)
+                                //note, stock ksp disappears the data while its copying, and respawns the dialog with the post-copy result.
+                                List<int> labCopyIndices = new List<int>();
+                                int ri = m_selectedPages.Count() - 1;
+                                foreach (DataPage pg in m_selectedPages.Reverse<DataPage>())
                                 {
-                                    try { pg.m_kspPage.OnSendToLab(pg.m_kspPage.pageData); }
-                                    catch {} //the callback tries to dismiss the murdered ExperimentsResultDialog here, can't do much but catch.
+                                    //partial selection can happen for lab copies
+                                    if (pg.m_kspPage.showLabOption)
+                                    {
+                                        try { pg.m_kspPage.OnSendToLab(pg.m_kspPage.pageData); }
+                                        catch { } //the callback tries to dismiss the murdered ExperimentsResultDialog here, can't do much but catch.
 
-                                    m_dataPages.RemoveAt(pg.m_index);
-                                    labCopyIndices.Add(ri); //collect for later deletion
+                                        m_dataPages.RemoveAt(pg.m_index);
+                                        labCopyIndices.Add(ri); //collect for later deletion
+                                    }
+                                    ri -= 1;
                                 }
-                                ri -= 1;
-                            }
-                            m_dirtyPages = true; //removed some, need to re-index remaining
+                                m_dirtyPages = true; //removed some, need to re-index remaining
 
-                            foreach (int indexToDel in labCopyIndices)
-                            {
-                                m_selectedPages.RemoveAt(indexToDel); //reverse removal just like above
-                            }
-                            m_dirtySelection = true; //some/none may remain, so possible default select, & update info pane regardless
+                                foreach (int indexToDel in labCopyIndices)
+                                {
+                                    m_selectedPages.RemoveAt(indexToDel); //reverse removal just like above
+                                }
+                                m_dirtySelection = true; //some/none may remain, so possible default select, & update info pane regardless
 
-                            m_labBtn = false;
+                                m_labBtn = false;
+                            }
                         }
-                        
                     }
 
                     //transmit btn
