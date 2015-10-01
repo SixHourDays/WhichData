@@ -116,29 +116,17 @@ namespace WhichData
                 m_biome = subject;                                                      //LaunchPad
             }
         }
-
-        private static int CmpStr(String a, String b) { return String.Compare(a, b); }
-        private static int CmpFlt(float a, float b) { return a < b ? -1 : a == b ? 0 : 1; }
-        
-        //Comparators for delegation
-        public delegate int SortDlgt(DataPage x, DataPage y);
-        public static int CmpPart(DataPage x, DataPage y) { return CmpStr(x.m_experi, y.m_experi); }
-        public static int CmpRcvrSci(DataPage x, DataPage y) { return CmpFlt(x.m_kspPage.scienceValue, y.m_kspPage.scienceValue); }
-        public static int CmpTrnsSci(DataPage x, DataPage y) { return CmpFlt(x.m_kspPage.transmitValue, y.m_kspPage.transmitValue); }
-        public static int CmpMits(DataPage x, DataPage y) { return CmpFlt(x.m_kspPage.dataSize, y.m_kspPage.dataSize); }
-        public static int CmpBiome(DataPage x, DataPage y) { return CmpStr(x.m_biome, y.m_biome); }
-        public static int CmpSitu(DataPage x, DataPage y) { return CmpStr(x.m_situ, y.m_situ); }
-        public static int CmpBody(DataPage x, DataPage y) { return CmpStr(x.m_body, y.m_body); }
     }
 
     public class SortField
     {
+       
         public string m_text;
         public bool m_guiToggle;
         public bool m_enabled;
-        public DataPage.SortDlgt m_sortDlgt;
+        public Func<DataPage, DataPage, int> m_sortDlgt;
 
-        public SortField( string title, DataPage.SortDlgt sortDlgt )
+        public SortField(string title, Func<DataPage, DataPage, int> sortDlgt)
         { 
             m_text = title;
             m_sortDlgt = sortDlgt;
@@ -331,20 +319,22 @@ namespace WhichData
         public LayoutDlgt m_layoutInfoPaneBody;
         public string m_labBtnMsg;
         public string m_transmitBtnMsg;
-        
 
 
-    
+        //generic comparer for a < b is -1, a == b is 0, a > b is 1
+        public static int Compare<T>(T x, T y) where T : IComparable { return x.CompareTo(y); }
+
         //mod state
+        //sortfields, lambdas dictating member to compare on
         public List<SortField> m_sortFields = new List<SortField>
         {
-            new SortField("Part", DataPage.CmpPart ),
-            new SortField("Recover Sci", DataPage.CmpRcvrSci ), 
-            new SortField("Transm. Sci", DataPage.CmpTrnsSci ),
-            new SortField("Mits", DataPage.CmpMits ),
-            new SortField("Biome", DataPage.CmpBiome ),
-            new SortField("Situation", DataPage.CmpSitu ),
-            new SortField("Celes. Body", DataPage.CmpBody )
+            new SortField("Part",           (x, y) => Compare(x.m_experi, y.m_experi)),
+            new SortField("Recover Sci",    (x, y) => Compare(x.m_kspPage.scienceValue, y.m_kspPage.scienceValue)), 
+            new SortField("Transm. Sci",    (x, y) => Compare(x.m_kspPage.transmitValue, y.m_kspPage.transmitValue)),
+            new SortField("Mits",           (x, y) => Compare(x.m_kspPage.dataSize, y.m_kspPage.dataSize)),
+            new SortField("Biome",          (x, y) => Compare(x.m_biome, y.m_biome)),
+            new SortField("Situation",      (x, y) => Compare(x.m_situ, y.m_situ)),
+            new SortField("Celes. Body",    (x, y) => Compare(x.m_body, y.m_body))
         };
         bool m_dirtySelection = false;
         public List<DataPage> m_selectedPages = new List<DataPage>();
@@ -783,54 +773,50 @@ namespace WhichData
                     }
                 }
 
-                //if we've never picked a page, default //HACKJEFFGIFFEN put this somewhere less idiotic
-                if (m_selectedPages.Count == 0)
-                {
-                    DataPage first = m_dataPages[0];
-                    first.m_selected = true;
-                    m_selectedPages.Add(first);
-                    m_dirtySelection = true;
-                }
-
                 //list click handling
                 {
-                    foreach (DataPage page in m_dataPages)
+                    //find first page with its row button clicked (or none, giving null)
+                    DataPage selectedPage = m_dataPages.Find( page => page.m_rowButton ); //my first lambda EVER!  hooray
+
+                    if ( selectedPage != null )
                     {
-                        if (page.m_rowButton)
+                        //unhighlight all the old
+                        m_selectedPages.ForEach( page => page.m_selected = false );
+
+                        //now discern whether click or altclick
+                        if (Input.GetKey(KeyCode.LeftAlt) || Input.GetKey(KeyCode.RightAlt))
                         {
-                            //unhighlight the old
-                            foreach (DataPage oldPage in m_selectedPages)
-                            {
-                                oldPage.m_selected = false;
-                            }
-
-                            //now discern whether click or altclick
-                            if (Input.GetKey(KeyCode.LeftAlt) || Input.GetKey(KeyCode.RightAlt))
-                            {
-                                int a = m_selectedPages.First().m_index; //smallest selected index 
-                                int b = m_selectedPages.Last().m_index; //largest
-                                int c = page.m_index; //brand new index chosen
-                                int start = Math.Min(Math.Min(a, b), c);
-                                int end = Math.Max(Math.Max(a, b), c);
-                                m_selectedPages = m_dataPages.GetRange(start, end - start + 1); // inclusive range
-                            }
-                            else
-                            {
-                                m_selectedPages.Clear();
-                                m_selectedPages.Add(page);
-                            }
-
-                            //the newly selected are highlighted in the accumulation loop next
-                            m_dirtySelection = true;
-
-                            break;
+                            int a = m_selectedPages.First().m_index; //smallest selected index 
+                            int b = m_selectedPages.Last().m_index; //largest
+                            int c = selectedPage.m_index; //brand new index chosen
+                            int start = Math.Min(Math.Min(a, b), c);
+                            int end = Math.Max(Math.Max(a, b), c);
+                            m_selectedPages = m_dataPages.GetRange(start, end - start + 1); // inclusive range
                         }
+                        else
+                        {
+                            m_selectedPages.Clear();
+                            m_selectedPages.Add(selectedPage);
+                        }
+
+                        //highlight all the new
+                        m_selectedPages.ForEach( page => page.m_selected = true );
+
+                        m_dirtySelection = true;
+                    }
+                    else if ( m_selectedPages.Count == 0 )
+                    {
+                        //if we've never picked a page //TODOJEFFGIFFEN put this somewhere less idiotic
+                        m_dataPages.First().m_selected = true;
+                        m_selectedPages.Add(m_dataPages.First());
+
+                        m_dirtySelection = true;
                     }
                 }
 
                 //ship part detection
                 //HACKJEFFGIFFEN observe this smarter w events
-                m_transmitBtnEnabled = FlightGlobals.ActiveVessel.FindPartModulesImplementing<IScienceDataTransmitter>().Count() > 0;
+                m_transmitBtnEnabled = FlightGlobals.ActiveVessel.FindPartModulesImplementing<IScienceDataTransmitter>().Count > 0;
                 List<ModuleScienceContainer> containerParts = FlightGlobals.ActiveVessel.FindPartModulesImplementing<ModuleScienceContainer>();
 
                 //populate info pane
@@ -861,20 +847,20 @@ namespace WhichData
                             transmitAvg += page.m_kspPage.xmitDataScalar * 100.0f;
                             transmitSci += page.m_kspPage.transmitValue;
                         }
-                        transmitAvg /= m_selectedPages.Count();
+                        transmitAvg /= m_selectedPages.Count;
 
                         //layout info pane stats
                         m_titleBar = m_selectedPages.Count + " Experiments Selected";
                         
                         m_boxMsg = 
                             recoverSci.ToString("F1") + "pts recoverable science onboard!\n" +
-                            (m_selectedPages.Count() - resetable) + " can discard, " + resetable + " can reset.\n" +
-                            labAble + "/" + m_selectedPages.Count() + " experiments available for lab copy.\n" + 
+                            (m_selectedPages.Count - resetable) + " can discard, " + resetable + " can reset.\n" +
+                            labAble + "/" + m_selectedPages.Count + " experiments available for lab copy.\n" + 
                             transmitSci.ToString("F1") + "pts via transmitting science.";
                         m_layoutInfoPaneBody = LayoutBodyGroup;
 
-                        m_moveBtnEnabled = (resetable > 0 && containerParts.Count() > 0);                               //experi result -> pod data
-                        m_moveBtnEnabled |= (m_selectedPages.Count() - resetable) > 0 && containerParts.Count() > 1;    //pod1 data -> pod2 data
+                        m_moveBtnEnabled = (resetable > 0 && containerParts.Count > 0);                               //experi result -> pod data
+                        m_moveBtnEnabled |= (m_selectedPages.Count - resetable) > 0 && containerParts.Count > 1;    //pod1 data -> pod2 data
 
                         m_labBtnEnabled = labAble > 0;
                         m_labBtnMsg = m_labBtnEnabled ? "+" + labCopyData.ToString("F0") : "0";
@@ -889,7 +875,7 @@ namespace WhichData
                         m_titleBar = page.m_kspPage.title;
                         m_boxMsg = page.m_kspPage.resultText;
                         m_layoutInfoPaneBody = LayoutBodySingle;
-                        m_moveBtnEnabled = containerParts.Count() > (page.m_kspPage.showReset ? 0 : 1); //experi result need 1 container to move to, intercontainer needs 2
+                        m_moveBtnEnabled = containerParts.Count > (page.m_kspPage.showReset ? 0 : 1); //experi result need 1 container to move to, intercontainer needs 2
                         m_labBtnEnabled = page.m_kspPage.showLabOption;
                         m_labBtnMsg = m_labBtnEnabled ? page.m_labBtnData : "0";
                         m_transmitBtnMsg = page.m_transBtnPerc;
@@ -908,7 +894,6 @@ namespace WhichData
                             pg.m_kspPage.OnKeepData(pg.m_kspPage.pageData);
                         }
                         m_dataPages.Clear();
-                        m_dirtyPages = true;
                         m_selectedPages.Clear();
                         m_dirtySelection = true;
 
@@ -918,15 +903,7 @@ namespace WhichData
                     //HACKJEFFGIFFEN should use reset on showReset bool
                     if (m_discardBtn)
                     {
-                        foreach (DataPage pg in m_selectedPages.Reverse<DataPage>())
-                        {
-                            pg.m_kspPage.OnDiscardData(pg.m_kspPage.pageData);
-                            m_dataPages.RemoveAt(pg.m_index); //and that's why we're removing selectees backwards
-                        }
-                        m_dirtyPages = true; //removed some, need to re-index remaining
-                        m_selectedPages.Clear();
-                        m_dirtySelection = true; //need to default select, and update info pane
-
+                        ReverseProcessSelected(ProcessDiscardData);
                         m_discardBtn = false;
                     }
 
@@ -935,46 +912,10 @@ namespace WhichData
                     {
                         if (m_moveBtnEnabled)
                         {
-                            List<int> deadSelectIndices = new List<int>();
-                            int ri = m_selectedPages.Count() - 1;
-                            //HACKJEFFGIFFEN use the oldPartHighlight for now
-                            foreach (DataPage page in m_selectedPages.Reverse<DataPage>())
-                            {
-                                //it is very easy to have a partial selection with lots of src==dst in it.
-                                if (page.m_kspPage.host != hackOldHighlightPart)
-                                {
-                                    //all destinations will have ModuleScienceContainer modules (dst cannot be experi)
-                                    ModuleScienceContainer dst = hackOldHighlightPart.GetComponent<ModuleScienceContainer>();
-
-                                    page.m_dataModule.DumpData(page.m_kspPage.pageData);
-                                    dst.AddData(page.m_kspPage.pageData);
-                                    dst.ReviewDataItem(page.m_kspPage.pageData); //create new entry to replace the old
-
-                                    m_dataPages.RemoveAt(page.m_index);
-                                    deadSelectIndices.Add(ri); //collect for later deletion
-                                }
-                                ri -= 1;
-                            }
-                            m_dirtyPages = true; //removed some, need to re-index remaining
-
-                            foreach (int indexToDel in deadSelectIndices)
-                            {
-                                m_selectedPages.RemoveAt(indexToDel); //reverse removal just like above
-                            }
-                            m_dirtySelection = true; //some/none may remain, so possible default select, & update info pane regardless
-
-                            //HACKJEFFGIFFEN //HACKJEFFGIFFEN //HACKJEFFGIFFEN fix the null?
-                            if (m_selectedPages.Count == 0 && m_dataPages.Count > 0)
-                            {
-                                DataPage first = m_dataPages[0];
-                                first.m_selected = true;
-                                m_selectedPages.Add(first);
-                            }
+                            ReverseProcessSelected(ProcessMoveData);
+                            m_moveBtn = false;
                         }
-                        else
-                        {
-                            //some button disable jazz
-                        }
+                        //TODOJEFFGIFFEN force ghosted
                     }
                     
                     //HACKJEFFGIFFEN
@@ -1017,63 +958,26 @@ namespace WhichData
                     //i think 1st is only lab that matters.  a docking of 2 together only works the 1st in the tree.
                     //true == CAN copy
                     //ModuleScienceLab.IsLabData( FlightGlobals.ActiveVessel, pg.m_kspPage.pageData ).ToString();
-
                     if (m_labBtn)
                     {
                         if (m_labBtnEnabled)
                         {
-                            //note, stock ksp disappears the data while its copying, and respawns the dialog with the post-copy result.
-                            List<int> deadSelectIndices = new List<int>();
-                            int ri = m_selectedPages.Count() - 1;
-                            foreach (DataPage pg in m_selectedPages.Reverse<DataPage>())
-                            {
-                                //partial selection can happen for lab copies
-                                if (pg.m_kspPage.showLabOption)
-                                {
-                                    try { pg.m_kspPage.OnSendToLab(pg.m_kspPage.pageData); }
-                                    catch { } //the callback tries to dismiss the murdered ExperimentsResultDialog here, can't do much but catch.
-
-                                    m_dataPages.RemoveAt(pg.m_index);
-                                    deadSelectIndices.Add(ri); //collect for later deletion
-                                }
-                                ri -= 1;
-                            }
-                            m_dirtyPages = true; //removed some, need to re-index remaining
-
-                            foreach (int indexToDel in deadSelectIndices)
-                            {
-                                m_selectedPages.RemoveAt(indexToDel); //reverse removal just like above
-                            }
-                            m_dirtySelection = true; //some/none may remain, so possible default select, & update info pane regardless
-
+                            ReverseProcessSelected(ProcessLabData);
                             m_labBtn = false;
                         }
+                        //TODOJEFFGIFFEN force ghosted
                     }
 
-                    //transmit btn
+                    if (m_transmitBtn)
                     {
-                        if (m_transmitBtn)
+                        if (m_transmitBtnEnabled)
                         {
-                            if (m_transmitBtnEnabled)
-                            {
-                                //TODOJEFFGIFFEN what happens on a transmit cut from power?
-                                //TODOJEFFGIFFEN what happens in remotetech?
-                                foreach (DataPage pg in m_selectedPages.Reverse<DataPage>())
-                                {
-                                    pg.m_kspPage.OnTransmitData(pg.m_kspPage.pageData);
-                                    m_dataPages.RemoveAt(pg.m_index);
-                                }
-                                m_dirtyPages = true; //removed some need to re-index remaining
-                                m_selectedPages.Clear();
-                                m_dirtySelection = true; //need to default select, and update info pane
-
-                                m_transmitBtn = false;
-                            }
-                            else
-                            {   //forced off as we're ghosted //HACKJEFFGIFFEN bogus doesnt force jack all
-                                m_transmitBtn = false;
-                            }
+                            //TODOJEFFGIFFEN what happens on a transmit cut from power?
+                            //TODOJEFFGIFFEN what happens in remotetech?
+                            ReverseProcessSelected( ProcessTransmitData );
+                            m_transmitBtn = false;
                         }
+                        //TODOJEFFGIFFEN force ghosted
                     }
 
                 }
@@ -1114,6 +1018,68 @@ namespace WhichData
                 Debug.Log("GA rd refscival " + ResearchAndDevelopment.GetReferenceDataValue( curPg.dataSize, s));
                 */
         }
+
+        //return whether to delete from m_selectedPages
+        public bool ProcessDiscardData(DataPage page) { page.m_kspPage.OnDiscardData(page.m_kspPage.pageData); return true; } //always delete cause always succeed
+        public bool ProcessTransmitData(DataPage page) { page.m_kspPage.OnTransmitData(page.m_kspPage.pageData); return true; } //always delete cause always succeed
+        public bool ProcessLabData(DataPage page)
+        {
+            bool labbed = false;
+            //partial selection can happen for lab copies
+            if (page.m_kspPage.showLabOption)
+            {
+                try { page.m_kspPage.OnSendToLab(page.m_kspPage.pageData); }
+                catch { } //the callback tries to dismiss the murdered ExperimentsResultDialog here, can't do much but catch.
+
+                labbed = true;
+            }
+
+            return labbed;
+        }
+        public bool ProcessMoveData(DataPage page)
+        {
+            bool moved = false;
+            //a partial selection can contain src==dst selectees, skip em
+            if (page.m_kspPage.host != hackOldHighlightPart) //HACKJEFFGIFFEN remove
+            {
+                ScienceData sciData = page.m_kspPage.pageData;
+                //all destinations will have ModuleScienceContainer modules (dst cannot be experi)
+                ModuleScienceContainer dst = hackOldHighlightPart.GetComponent<ModuleScienceContainer>();
+
+                page.m_dataModule.DumpData(sciData);
+                dst.AddData(sciData);
+                dst.ReviewDataItem(sciData); //create new entry to replace the old
+
+                moved = true;
+            }
+
+            return moved;
+        }
+
+        //public void ReverseProcessSelected(ProcessDataPage processDataDlgt)
+        public void ReverseProcessSelected(Func<DataPage, bool> processDataDlgt)
+        {
+            for (int i = m_selectedPages.Count - 1; i >= 0; i--)
+            {
+                DataPage page = m_selectedPages[i];
+                if (processDataDlgt(page))
+                {
+                    m_dataPages.RemoveAt(page.m_index);
+                    m_selectedPages.RemoveAt(i);  //and that's why we're removing selectees backwards
+                }
+            }
+            m_dirtyPages = true; //removed some, need to re-index remaining
+            m_dirtySelection = true; //need to default select, and update info pane
+
+            //HACKJEFFGIFFEN need the if no selected default catch here
+            if (m_selectedPages.Count == 0 && m_dataPages.Count > 0)
+            {
+                DataPage first = m_dataPages[0];
+                first.m_selected = true;
+                m_selectedPages.Add(first);
+            }
+        }
+
 
         public void OnDisable()
         {
