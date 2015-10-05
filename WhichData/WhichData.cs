@@ -315,8 +315,7 @@ namespace WhichData
 
         public string m_titleBar;
         public string m_boxMsg;
-        public delegate void LayoutDlgt();
-        public LayoutDlgt m_layoutInfoPaneBody;
+        public Action m_layoutInfoPaneBody; //really just enable disable the oldschool bars at bottom of box
         public string m_labBtnMsg;
         public string m_transmitBtnMsg;
 
@@ -635,23 +634,8 @@ namespace WhichData
 
             //find and use the existing textures from the orig dlg
             Texture2D[] textures = Resources.FindObjectsOfTypeAll<Texture2D>();
-            for (int i = 0;
-                i < textures.Length &&
-                ( m_dataIcon == null || m_scienceIcon == null );
-                i++)
-            {
-                Texture2D tex = textures[i];
-                if (tex.name == "resultsdialog_datasize")
-                {
-                    m_dataIcon = tex;
-                    continue;
-                }
-                if (tex.name == "resultsdialog_scivalue")
-                {
-                    m_scienceIcon = tex;
-                    continue;
-                }
-            }
+            m_dataIcon = textures.First<Texture2D>(t => t.name == "resultsdialog_datasize");
+            m_scienceIcon = textures.First<Texture2D>(t => t.name == "resultsdialog_scivalue");
 
             m_closeBtnStyle.margin = new RectOffset(6, 6, 0, 0); //top pad from window, bottom irrelevant
             m_closeBtnStyle.fixedWidth = m_closeBtnStyle.fixedHeight = 25.0f;
@@ -709,10 +693,7 @@ namespace WhichData
                 if (m_dlgSkin == null) { LazyInit(); }
 
                 //copy result pages to our collection
-                foreach (ExperimentResultDialogPage resultPage in ExperimentsResultDialog.Instance.pages)
-                {
-                    m_dataPages.Add(new DataPage(resultPage));
-                }
+                ExperimentsResultDialog.Instance.pages.ForEach( newPage => m_dataPages.Add(new DataPage(newPage)) );
                 m_dirtyPages = true; //new pages means we need to resort
 
                 //get rid of original dialog
@@ -764,10 +745,7 @@ namespace WhichData
 
                         //once re-ordered, indices need updating
                         int i = 0;
-                        foreach (DataPage page in m_dataPages)
-                        {
-                            page.m_index = i++;
-                        }
+                        m_dataPages.ForEach( page => page.m_index = i++ );
 
                         m_dirtyPages = false;
                     }
@@ -889,10 +867,7 @@ namespace WhichData
                     if (m_closeBtn)
                     {
                         //note close means "keep" for everything
-                        foreach (DataPage pg in m_dataPages)
-                        {
-                            pg.m_kspPage.OnKeepData(pg.m_kspPage.pageData);
-                        }
+                        m_dataPages.ForEach( pg => pg.m_kspPage.OnKeepData(pg.m_kspPage.pageData) );
                         m_dataPages.Clear();
                         m_selectedPages.Clear();
                         m_dirtySelection = true;
