@@ -192,14 +192,15 @@ namespace WhichData
         }
 */
 
-    //public static EventData<ScienceData> OnExperimentDeployed;
-    //public static EventData<float, TransactionReasons> OnScienceChanged;
-    //public static EventData<float, ScienceSubject, ProtoVessel, bool> OnScienceRecieved;
-        //from ModuleScienceContainer
+        //GameEvents.EventData...
+        //OnExperimentDeployed
+        //OnScienceChanged
+        //OnScienceRecieved
+        //from ModuleScienceContainer...
         //CollectDataExternalEvent
         //ReviewDataEvent
         //StoreDataExternalEvent
-        //future
+        //future...
         //onHideUI / onShowUI
         //onGUIRecoveryDialogSpawn
 
@@ -684,8 +685,124 @@ namespace WhichData
 
         public void Update()
         {
+            //HACKJEFFGIFFEN
+            /* //old normal based highlight
+            * page.m_kspPage.host.SetHighlightType(Part.HighlightType.AlwaysOn);
+            * page.m_kspPage.host.SetHighlightColor( Color.magenta );
+            * page.m_kspPage.host.SetHighlight( true, false );
+            * 
+            * //PPFX glow edge highlight
+            * HighlightingSystem.Highlighter hl = page.m_kspPage.host.FindModelTransform("model").gameObject.GetComponent<HighlightingSystem.Highlighter>();
+            * if (hl == null) { hl = page.m_kspPage.host.FindModelTransform("model").gameObject.AddComponent<HighlightingSystem.Highlighter>(); }
+            * hl.ConstantOn(Color.magenta);
+            * hl.SeeThroughOn();
+            */
+
+            //HACKJEFFGIFFEN demo mouse to part w highlight
+            Ray hoverRay = Camera.main.ScreenPointToRay(Input.mousePosition);
+            RaycastHit hit;
+            bool strike = Physics.Raycast(hoverRay, out hit, 1000.0f, 1 << 0); //1km length.  Note ship parts are on layer 0, mask needs to be 1<<layer desired
+            if (strike)
+            {
+                Part part = hit.collider.gameObject.GetComponentInParent<Part>(); //the collider is a subgameobject of the partmodule's gameobject
+
+                if (hackOldHighlightPart != null && hackOldHighlightPart != part)
+                {
+                    HighlightingSystem.Highlighter hl = hackOldHighlightPart.FindModelTransform("model").gameObject.GetComponent<HighlightingSystem.Highlighter>();
+                    hl.ConstantOff();
+                }
+
+                GameObject go = part.FindModelTransform("model").gameObject;
+                HighlightingSystem.Highlighter hl2 = go.GetComponent<HighlightingSystem.Highlighter>();
+                if (hl2 == null) { hl2 = go.AddComponent<HighlightingSystem.Highlighter>(); }
+                hl2.ConstantOn(Color.cyan);
+
+                hackOldHighlightPart = part;
+            }
 
 
+
+            //TODOJEFFGIFFEN
+            //buttons should context sensitive - number of experi they apply to displayed like X / All.
+            //move button imagery:
+            //  onboard should be folder arrow capsule //thought, science symbol instead?
+            //  eva get should be folder arrow kerb
+            //  eva put should be folder arrow capsule
+            //buttons should either be live or ghosted, NEVER gone, NEVER move.
+            //on any actual button down:
+            //  call that callback for selected list
+            //  remove entries from m_dataPages, clear selected
+            //  trigger list refresh (resot, reindex, reset selected)
+            //button ghost conditions:
+            //  no antenna
+            //  no lab
+            //  lab, but it has copies of all selected
+            //  all selected are in only onboard sci container (nowher to go as experi are data out only)
+
+            //action button handling
+            //all removers of pages & selections
+            if ( m_dataPages.Count > 0 )
+            {
+                if (m_closeBtn)
+                {
+                    //note close means "keep" for everything
+                    m_dataPages.ForEach(pg => pg.m_kspPage.OnKeepData(pg.m_kspPage.pageData));
+                    m_dataPages.Clear();
+                    m_selectedPages.Clear();
+                    m_dirtySelection = true;
+
+                    m_closeBtn = false; //clear the button click; stays on forever with no UI pump after this frame
+                }
+
+                //HACKJEFFGIFFEN should use reset on showReset bool
+                if (m_discardBtn)
+                {
+                    ReverseProcessSelected(ProcessDiscardData);
+                    m_discardBtn = false;
+                }
+
+                //move btn
+                if (m_moveBtn)
+                {
+                    if (m_moveBtnEnabled)
+                    {
+                        ReverseProcessSelected(ProcessMoveData);
+                        m_moveBtn = false;
+                    }
+                    //TODOJEFFGIFFEN force ghosted
+                }
+
+                //lab button
+                //HACKJEFFGIFFEN
+                //i think 1st is only lab that matters.  a docking of 2 together only works the 1st in the tree.
+                //true == CAN copy
+                //ModuleScienceLab.IsLabData( FlightGlobals.ActiveVessel, pg.m_kspPage.pageData ).ToString();
+                if (m_labBtn)
+                {
+                    if (m_labBtnEnabled)
+                    {
+                        ReverseProcessSelected(ProcessLabData);
+                        m_labBtn = false;
+                    }
+                    //TODOJEFFGIFFEN force ghosted
+                }
+
+                if (m_transmitBtn)
+                {
+                    if (m_transmitBtnEnabled)
+                    {
+                        //TODOJEFFGIFFEN what happens on a transmit cut from power?
+                        //TODOJEFFGIFFEN what happens in remotetech?
+                        ReverseProcessSelected(ProcessTransmitData);
+                        m_transmitBtn = false;
+                    }
+                    //TODOJEFFGIFFEN force ghosted
+                }
+
+            }
+
+
+            //now that we've removed all we need, add new pages
             //when dialog is spawned, steal its data and kill it
             if (ExperimentsResultDialog.Instance != null)
             {
@@ -700,6 +817,8 @@ namespace WhichData
                 Destroy(ExperimentsResultDialog.Instance.gameObject); //1 frame up still...ehh
             }
 
+
+            //m_dataPages now holds all we need this frame, update UI
             if (m_dataPages.Count > 0)
             {
                 //list field sorting
@@ -753,15 +872,24 @@ namespace WhichData
 
                 //list click handling
                 {
+                    //when there is no selection, default
+                    if (m_selectedPages.Count == 0)
+                    {
+                        m_dataPages.First().m_selected = true;
+                        m_selectedPages.Add(m_dataPages.First());
+
+                        m_dirtySelection = true;
+                    }
+
                     //find first page with its row button clicked (or none, giving null)
                     DataPage selectedPage = m_dataPages.Find( page => page.m_rowButton ); //my first lambda EVER!  hooray
 
-                    if ( selectedPage != null )
+                    if (selectedPage != null)
                     {
                         //unhighlight all the old
-                        m_selectedPages.ForEach( page => page.m_selected = false );
+                        m_selectedPages.ForEach(page => page.m_selected = false);
 
-                        //now discern whether click or altclick
+                        //now discern whether click or altclick (note altclick requires prev regular click)
                         if (Input.GetKey(KeyCode.LeftAlt) || Input.GetKey(KeyCode.RightAlt))
                         {
                             int a = m_selectedPages.First().m_index; //smallest selected index 
@@ -778,15 +906,7 @@ namespace WhichData
                         }
 
                         //highlight all the new
-                        m_selectedPages.ForEach( page => page.m_selected = true );
-
-                        m_dirtySelection = true;
-                    }
-                    else if ( m_selectedPages.Count == 0 )
-                    {
-                        //if we've never picked a page //TODOJEFFGIFFEN put this somewhere less idiotic
-                        m_dataPages.First().m_selected = true;
-                        m_selectedPages.Add(m_dataPages.First());
+                        m_selectedPages.ForEach(page => page.m_selected = true);
 
                         m_dirtySelection = true;
                     }
@@ -861,118 +981,6 @@ namespace WhichData
 
                     m_dirtySelection = false;
                 }
-
-                //action button handling
-                {
-                    if (m_closeBtn)
-                    {
-                        //note close means "keep" for everything
-                        m_dataPages.ForEach( pg => pg.m_kspPage.OnKeepData(pg.m_kspPage.pageData) );
-                        m_dataPages.Clear();
-                        m_selectedPages.Clear();
-                        m_dirtySelection = true;
-
-                        m_closeBtn = false; //clear the button click; stays on forever with no UI pump after this frame
-                    }
-
-                    //HACKJEFFGIFFEN should use reset on showReset bool
-                    if (m_discardBtn)
-                    {
-                        ReverseProcessSelected(ProcessDiscardData);
-                        m_discardBtn = false;
-                    }
-
-                    //move btn
-                    if (m_moveBtn)
-                    {
-                        if (m_moveBtnEnabled)
-                        {
-                            ReverseProcessSelected(ProcessMoveData);
-                            m_moveBtn = false;
-                        }
-                        //TODOJEFFGIFFEN force ghosted
-                    }
-                    
-                    //HACKJEFFGIFFEN
-                    /* //old normal based highlight
-                    * page.m_kspPage.host.SetHighlightType(Part.HighlightType.AlwaysOn);
-                    * page.m_kspPage.host.SetHighlightColor( Color.magenta );
-                    * page.m_kspPage.host.SetHighlight( true, false );
-                    * 
-                    * //PPFX glow edge highlight
-                    * HighlightingSystem.Highlighter hl = page.m_kspPage.host.FindModelTransform("model").gameObject.GetComponent<HighlightingSystem.Highlighter>();
-                    * if (hl == null) { hl = page.m_kspPage.host.FindModelTransform("model").gameObject.AddComponent<HighlightingSystem.Highlighter>(); }
-                    * hl.ConstantOn(Color.magenta);
-                    * hl.SeeThroughOn();
-                    */
-
-                    //HACKJEFFGIFFEN demo mouse to part w highlight
-                    Ray hoverRay = Camera.main.ScreenPointToRay(Input.mousePosition);
-                    RaycastHit hit;
-                    bool strike = Physics.Raycast(hoverRay, out hit, 1000.0f, 1<<0); //1km length.  Note ship parts are on layer 0, mask needs to be 1<<layer desired
-                    if (strike)
-                    {
-                        Part part = hit.collider.gameObject.GetComponentInParent<Part>(); //the collider is a subgameobject of the partmodule's gameobject
-
-                        if (hackOldHighlightPart != null && hackOldHighlightPart != part)
-                        {
-                            HighlightingSystem.Highlighter hl = hackOldHighlightPart.FindModelTransform("model").gameObject.GetComponent<HighlightingSystem.Highlighter>();
-                            hl.ConstantOff();
-                        }
-
-                        GameObject go = part.FindModelTransform("model").gameObject;
-                        HighlightingSystem.Highlighter hl2 = go.GetComponent<HighlightingSystem.Highlighter>();
-                        if (hl2 == null) { hl2 = go.AddComponent<HighlightingSystem.Highlighter>(); }
-                        hl2.ConstantOn(Color.cyan);
-
-                        hackOldHighlightPart = part;
-                    }
-
-                    //lab button
-                    //HACKJEFFGIFFEN
-                    //i think 1st is only lab that matters.  a docking of 2 together only works the 1st in the tree.
-                    //true == CAN copy
-                    //ModuleScienceLab.IsLabData( FlightGlobals.ActiveVessel, pg.m_kspPage.pageData ).ToString();
-                    if (m_labBtn)
-                    {
-                        if (m_labBtnEnabled)
-                        {
-                            ReverseProcessSelected(ProcessLabData);
-                            m_labBtn = false;
-                        }
-                        //TODOJEFFGIFFEN force ghosted
-                    }
-
-                    if (m_transmitBtn)
-                    {
-                        if (m_transmitBtnEnabled)
-                        {
-                            //TODOJEFFGIFFEN what happens on a transmit cut from power?
-                            //TODOJEFFGIFFEN what happens in remotetech?
-                            ReverseProcessSelected( ProcessTransmitData );
-                            m_transmitBtn = false;
-                        }
-                        //TODOJEFFGIFFEN force ghosted
-                    }
-
-                }
-
-                //TODOJEFFGIFFEN
-                //buttons should context sensitive - number of experi they apply to displayed like X / All.
-                //move button imagery:
-                //  onboard should be folder arrow capsule //thought, science symbol instead?
-                //  eva get should be folder arrow kerb
-                //  eva put should be folder arrow capsule
-                //buttons should either be live or ghosted, NEVER gone, NEVER move.
-                //on any actual button down:
-                //  call that callback for selected list
-                //  remove entries from m_dataPages, clear selected
-                //  trigger list refresh (resot, reindex, reset selected)
-                //button ghost conditions:
-                //  no antenna
-                //  no lab
-                //  lab, but it has copies of all selected
-                //  all selected are in only onboard sci container (nowher to go as experi are data out only)
             }
             /*Debug.Log("GA dataSize " + curPg.dataSize);
                 Debug.Log("GA refValue " + curPg.refValue);
@@ -1023,7 +1031,7 @@ namespace WhichData
 
                 page.m_dataModule.DumpData(sciData);
                 dst.AddData(sciData);
-                dst.ReviewDataItem(sciData); //create new entry to replace the old
+                dst.ReviewDataItem(sciData); //create new entry to replace the old //HACKJEFFGIFFEN maybe part scan catches?
 
                 moved = true;
             }
@@ -1031,7 +1039,6 @@ namespace WhichData
             return moved;
         }
 
-        //public void ReverseProcessSelected(ProcessDataPage processDataDlgt)
         public void ReverseProcessSelected(Func<DataPage, bool> processDataDlgt)
         {
             for (int i = m_selectedPages.Count - 1; i >= 0; i--)
@@ -1045,16 +1052,7 @@ namespace WhichData
             }
             m_dirtyPages = true; //removed some, need to re-index remaining
             m_dirtySelection = true; //need to default select, and update info pane
-
-            //HACKJEFFGIFFEN need the if no selected default catch here
-            if (m_selectedPages.Count == 0 && m_dataPages.Count > 0)
-            {
-                DataPage first = m_dataPages[0];
-                first.m_selected = true;
-                m_selectedPages.Add(first);
-            }
         }
-
 
         public void OnDisable()
         {
