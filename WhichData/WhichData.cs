@@ -169,8 +169,15 @@ namespace WhichData
 
         int m_callCount;
 
+        public void OnVesselModified(Vessel vessel) { Debug.Log("GA vessel modified"); }
+
         public void OnPartCouple(GameEvents.FromToAction<Part, Part> action) { Debug.Log("GA part couple"); }
+        public void OnPartUndock(Part part) { Debug.Log("GA part undock"); }
+        public void OnSameVesselDock(GameEvents.FromToAction<ModuleDockingNode, ModuleDockingNode> action) { Debug.Log("GA same vessel dock"); }
+        public void OnSameVesselUndock(GameEvents.FromToAction<ModuleDockingNode, ModuleDockingNode> action) { Debug.Log("GA same vessel undock"); }
+
         public void OnUndock(EventReport report) { Debug.Log("GA undock"); }
+
         public void OnStageActivate(int stage) { Debug.Log("GA stage activate"); }
         public void OnStageSeparate(EventReport report) { Debug.Log("GA stage sep"); }
         public void OnPartDie(Part part) { Debug.Log("GA part die"); }
@@ -224,9 +231,14 @@ namespace WhichData
 
         public void Awake()
         {
-            Debug.Log("GA " + m_callCount++ + " Awake()");
+            Debug.Log("GA " + m_callCount++ + " Awake*()");
+
+            GameEvents.onVesselWasModified.Add(OnVesselModified);
 
             GameEvents.onPartCouple.Add(OnPartCouple);
+            GameEvents.onPartUndock.Add(OnPartUndock);
+            GameEvents.onSameVesselDock.Add(OnSameVesselDock);
+            GameEvents.onSameVesselUndock.Add(OnSameVesselUndock);
             GameEvents.onUndock.Add(OnUndock);
 
             GameEvents.onStageActivate.Add(OnStageActivate);
@@ -1172,8 +1184,14 @@ namespace WhichData
         public void OnDestroy()
         {
             Debug.Log("GA " + m_callCount++ + " OnDestroy()");
+            GameEvents.onVesselWasModified.Remove(OnVesselModified);
+
             GameEvents.onPartCouple.Remove(OnPartCouple);
+            GameEvents.onPartUndock.Remove(OnPartUndock);
+            GameEvents.onSameVesselDock.Remove(OnSameVesselDock);
+            GameEvents.onSameVesselUndock.Remove(OnSameVesselUndock);
             GameEvents.onUndock.Remove(OnUndock);
+
             GameEvents.onStageActivate.Remove(OnStageActivate);
             GameEvents.onStageSeparation.Remove(OnStageSeparate);
             GameEvents.onPartDie.Remove(OnPartDie);
