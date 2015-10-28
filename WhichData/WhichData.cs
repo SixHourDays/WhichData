@@ -120,14 +120,14 @@ namespace WhichData
 
     public class SortField
     {
-       
+
         public string m_text;
         public bool m_guiToggle;
         public bool m_enabled;
         public Func<DataPage, DataPage, int> m_sortDlgt;
 
         public SortField(string title, Func<DataPage, DataPage, int> sortDlgt)
-        { 
+        {
             m_text = title;
             m_sortDlgt = sortDlgt;
 
@@ -164,33 +164,46 @@ namespace WhichData
         public WhichData()
         {
             m_callCount = 0;
-            Debug.Log("GA " + m_callCount++); 
+            Debug.Log("GA " + m_callCount++);
         }
 
         int m_callCount;
 
-/*
-        public void ExperimentDeploy(ScienceData data)
-        {
-            Debug.Log("GA " + m_callCount++ + " ExperimentDeploy()");
-        }
-*/
+        public void OnPartCouple(GameEvents.FromToAction<Part, Part> action) { Debug.Log("GA part couple"); }
+        public void OnPartUndock(Part part) { Debug.Log("GA part undock"); }
+        public void OnStageActivate(int stage) { Debug.Log("GA stage activate"); }
+        public void OnStageSeparate(EventReport report) { Debug.Log("GA stage sep"); }
+        public void OnPartDie(Part part) { Debug.Log("GA part die"); }
+
 
         //GameEvents.EventData...
         //ship parts
         //public static EventData<Vessel> onVesselWasModified;//any vessel changes: un/docking, decoupling, parts breaking, crash
-        ////public static EventData<GameEvents.FromToAction<Part, Part>> onPartCouple; //on dock / grapple
-        ////public static EventData<Part> onPartDie; //on physical destruction of part
-        ////public static EventData<Part> onPartUndock;
+        //public static EventData<GameEvents.FromToAction<Part, Part>> onPartCouple; //on dock / grapple
+        //public static EventData<Part> onPartUndock;
+        //public static EventData<int> onStageActivate;
+        //public static EventData<EventReport> onStageSeparation;
+        //public static EventData<Part> onPartDie; //on physical destruction of part
+
+
+        public void OnCrewBoardVessel(GameEvents.FromToAction<Part,Part> action) { Debug.Log("GA crew board"); }
+        public void OnCrewEva(GameEvents.FromToAction<Part,Part> action) { Debug.Log("GA crew eva"); }
+        public void OnCrewTransferred(GameEvents.HostedFromToAction<ProtoCrewMember, Part> action) { Debug.Log("GA crew board"); }
 
         //crew 
         //public static EventData<GameEvents.FromToAction<Part, Part>> onCrewBoardVessel; //eva->ship
         //public static EventData<GameEvents.FromToAction<Part, Part>> onCrewOnEva; //ship->eva
         //public static EventData<EventReport> onCrewKilled; //kerb dies (imagine LS mods would fire on death in pod)
         //public static EventData<GameEvents.HostedFromToAction<ProtoCrewMember, Part>> onCrewTransferred; //lab funtions altering when 2/2?
-        
+
+        /*public void OnVesselWasModified(Vessel ship)//any vessel changes: un/docking, decoupling, parts breaking, crash
+        {
+            ScanShip();
+        }*/
+        public void OnExperimentDeployed(ScienceData data) {Debug.Log("GA experi deploy");}
+
         //public static EventData<ScienceData> OnExperimentDeployed; //perhaps use instead of polling?
-        
+
         //UI
         //public static EventVoid onHideUI; //should respond to this if its not forced
         //public static EventVoid onShowUI;
@@ -208,15 +221,48 @@ namespace WhichData
             Debug.Log("GA " + m_callCount++ + " Review()");
         }
         */
-        
+
         public void Awake()
         {
             Debug.Log("GA " + m_callCount++ + " Awake()");
-            //GameEvents.OnExperimentDeployed.Add( ExperimentDeploy );
-           // GameEvents.OnScienceChanged.Add( ScienceChange );
-           // GameEvents.OnScienceRecieved.Add( ScienceReceive );
-           //HACKJEFFGIFFEN heres where we can sign up for global events, like ship reconfigures...
 
+            GameEvents.onPartCouple.Add(OnPartCouple);
+            GameEvents.onPartUndock.Add(OnPartUndock);
+            GameEvents.onStageActivate.Add(OnStageActivate);
+            GameEvents.onStageSeparation.Add(OnStageSeparate);
+            GameEvents.onPartDie.Add(OnPartDie);
+            
+            GameEvents.onCrewBoardVessel.Add(OnCrewBoardVessel);
+            GameEvents.onCrewOnEva.Add(OnCrewEva);
+            //GameEVents.onCrewKilled.Add(OnCrewKilled);
+            GameEvents.onCrewTransferred.Add(OnCrewTransferred);
+                        
+            GameEvents.OnExperimentDeployed.Add( OnExperimentDeployed );
+            
+        }
+
+        public void ScanShip()
+        { 
+            //ModuleScienceExperiment, ModuleScienceLab, ModuleScienceContainer (pods)...all inherit from this interface
+            List<IScienceDataContainer> conts = FlightGlobals.ActiveVessel.FindPartModulesImplementing<IScienceDataContainer>();
+
+            Debug.Log("GA Vessel science containers:");
+            int partCount = 0;
+            foreach (IScienceDataContainer cont in conts)
+            {
+                PartModule partModule = cont as PartModule; //hooray for C# safe downcasting
+                if (partModule != null)
+                {
+                    Debug.Log(partCount++ + " " + partModule.name);
+
+                    int dataCount = 0;
+                    ScienceData[] datas = cont.GetData();
+                    foreach (ScienceData data in datas)
+                    {
+                        Debug.Log("\t" + dataCount++.ToString() + " " + data.title);
+                    }
+                }
+            }
         }
 
         public void OnEnable()
@@ -731,7 +777,6 @@ namespace WhichData
 
                     if (Input.GetMouseButtonDown(0))
                     {
-                        //TODOJEFFGIFFEN finish up here - verify hit is sci cont., run ReverseProcSel...
                         Ray clickRay = Camera.main.ScreenPointToRay(Input.mousePosition);
                         RaycastHit hit;
                         bool strike = Physics.Raycast(clickRay, out hit, 1000.0f, 1 << 0); //1km length.  Note ship parts are on layer 0, mask needs to be 1<<layer desired
@@ -1089,11 +1134,14 @@ namespace WhichData
                 //all destinations will have ModuleScienceContainer modules (dst cannot be experi)
                 ModuleScienceContainer dstCont = dstPart.GetComponent<ModuleScienceContainer>();
 
-                page.m_dataModule.DumpData(sciData);
-                dstCont.AddData(sciData);
-                dstCont.ReviewDataItem(sciData); //create new entry to replace the old //HACKJEFFGIFFEN maybe part scan catches?
-
-                moved = true;
+                //when container disallows repeats, check for uniqueness
+                if (dstCont.allowRepeatedSubjects || !dstCont.HasData(sciData))
+                {
+                    page.m_dataModule.DumpData(sciData);
+                    dstCont.AddData(sciData);
+                    dstCont.ReviewDataItem(sciData); //create new entry to replace the old //HACKJEFFGIFFEN maybe part scan catches?
+                    moved = true;
+                }
             }
 
             return moved;
