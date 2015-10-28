@@ -170,7 +170,7 @@ namespace WhichData
         int m_callCount;
 
         public void OnPartCouple(GameEvents.FromToAction<Part, Part> action) { Debug.Log("GA part couple"); }
-        public void OnPartUndock(Part part) { Debug.Log("GA part undock"); }
+        public void OnUndock(EventReport report) { Debug.Log("GA undock"); }
         public void OnStageActivate(int stage) { Debug.Log("GA stage activate"); }
         public void OnStageSeparate(EventReport report) { Debug.Log("GA stage sep"); }
         public void OnPartDie(Part part) { Debug.Log("GA part die"); }
@@ -188,7 +188,7 @@ namespace WhichData
 
         public void OnCrewBoardVessel(GameEvents.FromToAction<Part,Part> action) { Debug.Log("GA crew board"); }
         public void OnCrewEva(GameEvents.FromToAction<Part,Part> action) { Debug.Log("GA crew eva"); }
-        public void OnCrewTransferred(GameEvents.HostedFromToAction<ProtoCrewMember, Part> action) { Debug.Log("GA crew board"); }
+        public void OnCrewTransferred(GameEvents.HostedFromToAction<ProtoCrewMember, Part> action) { Debug.Log("GA crew transfer"); }
 
         //crew 
         //public static EventData<GameEvents.FromToAction<Part, Part>> onCrewBoardVessel; //eva->ship
@@ -227,9 +227,11 @@ namespace WhichData
             Debug.Log("GA " + m_callCount++ + " Awake()");
 
             GameEvents.onPartCouple.Add(OnPartCouple);
-            GameEvents.onPartUndock.Add(OnPartUndock);
+            GameEvents.onUndock.Add(OnUndock);
+
             GameEvents.onStageActivate.Add(OnStageActivate);
             GameEvents.onStageSeparation.Add(OnStageSeparate);
+
             GameEvents.onPartDie.Add(OnPartDie);
             
             GameEvents.onCrewBoardVessel.Add(OnCrewBoardVessel);
@@ -1170,6 +1172,18 @@ namespace WhichData
         public void OnDestroy()
         {
             Debug.Log("GA " + m_callCount++ + " OnDestroy()");
+            GameEvents.onPartCouple.Remove(OnPartCouple);
+            GameEvents.onUndock.Remove(OnUndock);
+            GameEvents.onStageActivate.Remove(OnStageActivate);
+            GameEvents.onStageSeparation.Remove(OnStageSeparate);
+            GameEvents.onPartDie.Remove(OnPartDie);
+
+            GameEvents.onCrewBoardVessel.Remove(OnCrewBoardVessel);
+            GameEvents.onCrewOnEva.Remove(OnCrewEva);
+            //GameEVents.onCrewKilled.Remove(OnCrewKilled);
+            GameEvents.onCrewTransferred.Remove(OnCrewTransferred);
+
+            GameEvents.OnExperimentDeployed.Remove(OnExperimentDeployed);
         }
     }
 }

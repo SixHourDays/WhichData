@@ -15,10 +15,10 @@ move btn gains 2nd step: UI hide + destination mouse pick
 fixed dupe copy doubling...but no note of skip
 i think missing Ships/VAB/SPH dirs were screwing up VAB buttons
 find all IScienceDataContainers as PartModules and listing science works nicely
-experi deploy, crew board/eva double trigger, part die ok, stage separate is what we care about...
-test remainig (transfers, undock, redock)
-staging away experis makes 2 events
+experi deploy, crew board/eva, part die, stage activate/sep, redock, transfer
+test remainig ( undock)
 
+note antenna/lab destroy, not just container destroy, effects the dialog :-)
 more sorts: lab copy, container, 
 failsafes: moves of dupes to pods and lab copies already done should STAY
 review is all aboard, selects reviewed

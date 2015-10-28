@@ -63,9 +63,11 @@ mkdir %25SHD%25
 copy /Y $(TargetPath) %25SHD%25
 copy /Y "$(SolutionDir)art\*.tga" %25SHD%25
 
-set SaveDir="$(SolutionDir)..\Kerbal Space ProgramDev\saves\WhichDataTest\"
-if not exist %25SaveDir%25 mkdir %25SaveDir%25
-copy /Y "$(SolutionDir)testSave\persistent.sfs" %25SaveDir%25
+set SaveDir="$(SolutionDir)..\Kerbal Space ProgramDev\saves\WhichDataTest"
+if exist %25SaveDir%25 rmdir /S /Q %25SaveDir%25
+mkdir %25SaveDir%25
+robocopy "$(SolutionDir)testSave" %25SaveDir%25 /E
+exit 0
 </PostBuildEvent>
   </PropertyGroup>
   <!-- To modify your build process, add your task inside one of the targets below and uncomment it. 
