@@ -169,47 +169,19 @@ namespace WhichData
 
         int m_callCount;
 
-        public void OnVesselModified(Vessel vessel) { Debug.Log("GA vessel modified"); }
-
+        //dock
         public void OnPartCouple(GameEvents.FromToAction<Part, Part> action) { Debug.Log("GA part couple"); }
-        public void OnPartUndock(Part part) { Debug.Log("GA part undock"); }
-        public void OnSameVesselDock(GameEvents.FromToAction<ModuleDockingNode, ModuleDockingNode> action) { Debug.Log("GA same vessel dock"); }
-        public void OnSameVesselUndock(GameEvents.FromToAction<ModuleDockingNode, ModuleDockingNode> action) { Debug.Log("GA same vessel undock"); }
-
-        public void OnUndock(EventReport report) { Debug.Log("GA undock"); }
-
-        public void OnStageActivate(int stage) { Debug.Log("GA stage activate"); }
-        public void OnStageSeparate(EventReport report) { Debug.Log("GA stage sep"); }
+        //undock, shear part off, decouple, destroy (phys parts)
+        public void OnPartJointBreak(PartJoint joint) { Debug.Log("GA part joint break"); }
+        //destroy (including non-phys parts)
         public void OnPartDie(Part part) { Debug.Log("GA part die"); }
-
-
-        //GameEvents.EventData...
-        //ship parts
-        //public static EventData<Vessel> onVesselWasModified;//any vessel changes: un/docking, decoupling, parts breaking, crash
-        //public static EventData<GameEvents.FromToAction<Part, Part>> onPartCouple; //on dock / grapple
-        //public static EventData<Part> onPartUndock;
-        //public static EventData<int> onStageActivate;
-        //public static EventData<EventReport> onStageSeparation;
-        //public static EventData<Part> onPartDie; //on physical destruction of part
-
 
         public void OnCrewBoardVessel(GameEvents.FromToAction<Part,Part> action) { Debug.Log("GA crew board"); }
         public void OnCrewEva(GameEvents.FromToAction<Part,Part> action) { Debug.Log("GA crew eva"); }
-        public void OnCrewTransferred(GameEvents.HostedFromToAction<ProtoCrewMember, Part> action) { Debug.Log("GA crew transfer"); }
-
-        //crew 
-        //public static EventData<GameEvents.FromToAction<Part, Part>> onCrewBoardVessel; //eva->ship
-        //public static EventData<GameEvents.FromToAction<Part, Part>> onCrewOnEva; //ship->eva
-        //public static EventData<EventReport> onCrewKilled; //kerb dies (imagine LS mods would fire on death in pod)
+        public void OnCrewKilled(EventReport report) { Debug.Log("GA crew killed"); }
         //public static EventData<GameEvents.HostedFromToAction<ProtoCrewMember, Part>> onCrewTransferred; //lab funtions altering when 2/2?
-
-        /*public void OnVesselWasModified(Vessel ship)//any vessel changes: un/docking, decoupling, parts breaking, crash
-        {
-            ScanShip();
-        }*/
+        
         public void OnExperimentDeployed(ScienceData data) {Debug.Log("GA experi deploy");}
-
-        //public static EventData<ScienceData> OnExperimentDeployed; //perhaps use instead of polling?
 
         //UI
         //public static EventVoid onHideUI; //should respond to this if its not forced
@@ -233,23 +205,14 @@ namespace WhichData
         {
             Debug.Log("GA " + m_callCount++ + " Awake*()");
 
-            GameEvents.onVesselWasModified.Add(OnVesselModified);
-
             GameEvents.onPartCouple.Add(OnPartCouple);
-            GameEvents.onPartUndock.Add(OnPartUndock);
-            GameEvents.onSameVesselDock.Add(OnSameVesselDock);
-            GameEvents.onSameVesselUndock.Add(OnSameVesselUndock);
-            GameEvents.onUndock.Add(OnUndock);
-
-            GameEvents.onStageActivate.Add(OnStageActivate);
-            GameEvents.onStageSeparation.Add(OnStageSeparate);
-
+            GameEvents.onPartJointBreak.Add(OnPartJointBreak);
             GameEvents.onPartDie.Add(OnPartDie);
             
             GameEvents.onCrewBoardVessel.Add(OnCrewBoardVessel);
             GameEvents.onCrewOnEva.Add(OnCrewEva);
-            //GameEVents.onCrewKilled.Add(OnCrewKilled);
-            GameEvents.onCrewTransferred.Add(OnCrewTransferred);
+            GameEvents.onCrewKilled.Add(OnCrewKilled);
+            //GameEvents.onCrewTransferred.Add(OnCrewTransferred);
                         
             GameEvents.OnExperimentDeployed.Add( OnExperimentDeployed );
             
@@ -1184,22 +1147,15 @@ namespace WhichData
         public void OnDestroy()
         {
             Debug.Log("GA " + m_callCount++ + " OnDestroy()");
-            GameEvents.onVesselWasModified.Remove(OnVesselModified);
 
             GameEvents.onPartCouple.Remove(OnPartCouple);
-            GameEvents.onPartUndock.Remove(OnPartUndock);
-            GameEvents.onSameVesselDock.Remove(OnSameVesselDock);
-            GameEvents.onSameVesselUndock.Remove(OnSameVesselUndock);
-            GameEvents.onUndock.Remove(OnUndock);
-
-            GameEvents.onStageActivate.Remove(OnStageActivate);
-            GameEvents.onStageSeparation.Remove(OnStageSeparate);
+            GameEvents.onPartJointBreak.Remove(OnPartJointBreak);
             GameEvents.onPartDie.Remove(OnPartDie);
 
             GameEvents.onCrewBoardVessel.Remove(OnCrewBoardVessel);
             GameEvents.onCrewOnEva.Remove(OnCrewEva);
-            //GameEVents.onCrewKilled.Remove(OnCrewKilled);
-            GameEvents.onCrewTransferred.Remove(OnCrewTransferred);
+            GameEvents.onCrewKilled.Remove(OnCrewKilled);
+            //GameEvents.onCrewTransferred.Remove(OnCrewTransferred);
 
             GameEvents.OnExperimentDeployed.Remove(OnExperimentDeployed);
         }
