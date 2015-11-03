@@ -13,12 +13,28 @@ move btn gains 2nd step: UI hide + destination mouse pick
 
 
 fixed dupe copy doubling...but no note of skip
-i think missing Ships/VAB/SPH dirs were screwing up VAB buttons
 find all IScienceDataContainers as PartModules and listing science works nicely
-experi deploy, crew board/eva, part die, stage activate/sep, redock, transfer
-test remainig ( undock)
+experi deploy, crew board/eva/transfer, part die, stage activate/sep, dock/undock, partjoint break
 
-note antenna/lab destroy, not just container destroy, effects the dialog :-)
+PARADIGM SHIFT
+ok.  up till now we're based around the ExperiResultDW and its horribleness.  This was due to needing its callbacks to perform KSP functions.
+But...you think you've found all the callback calls.
+	keep, as we have know from the begnning...does jack shit.
+	ModuleScienceContainer::DumpData(ScienceData data);									//discard
+	ModuleScienceExperiment::ResetExperiment();											//reset
+	ModuleScienceLab::ProcessData(ScienceData item, Callback<ScienceData> onComplete);	//lab clone
+	ModuleDataTransmitter::TransmitData(List<ScienceData> dataQueue, Callback callback)	//transmit
+So.  Can we actually skip the ExperiResultDW altogether?
+
+
+in pursuit of presenting an 'all data onboard' view of the dialog
+load will do full ship scan, track experi, containers, and all onboard data, as well as antenna and lab presence
+then we listen..
+listen for undock/redock/sep/shear/die, containers, experi, labs and antenna joining or leaving the ship need accounted for
+listen for crew board/eva do alter the scientist clean right click menu
+listen for deployed/reviewdata to catch more science inserting to the dialog
+how to listen for take data on eva?
+
 more sorts: lab copy, container, 
 failsafes: moves of dupes to pods and lab copies already done should STAY
 review is all aboard, selects reviewed
@@ -27,3 +43,6 @@ part gain / loss updates to data
 gather right-click for pod, when any exp has data in it
 clean right-click for pod, when any exp is spent & scientist is aboard
 eva get/StoreData trigger dialog
+listen for active vessel switch
+listen for hide ui
+save selected state & position to ship file

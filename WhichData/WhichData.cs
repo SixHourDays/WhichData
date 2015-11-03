@@ -172,7 +172,7 @@ namespace WhichData
         //dock
         public void OnPartCouple(GameEvents.FromToAction<Part, Part> action) { Debug.Log("GA part couple"); }
         //undock, shear part off, decouple, destroy (phys parts)
-        public void OnPartJointBreak(PartJoint joint) { Debug.Log("GA part joint break"); }
+        public void OnPartJointBreak(PartJoint joint) { Debug.Log("GA part joint break"); ScanShip(); }
         //destroy (including non-phys parts)
         public void OnPartDie(Part part) { Debug.Log("GA part die"); }
 
@@ -219,27 +219,40 @@ namespace WhichData
         }
 
         public void ScanShip()
-        { 
-            //ModuleScienceExperiment, ModuleScienceLab, ModuleScienceContainer (pods)...all inherit from this interface
-            List<IScienceDataContainer> conts = FlightGlobals.ActiveVessel.FindPartModulesImplementing<IScienceDataContainer>();
+        {
+            Debug.Log("GA Vessel Scan");
+            
+            //break this up into some specifics
+            //firstly, experiments
+            List<IScienceDataContainer> parts = FlightGlobals.ActiveVessel.FindPartModulesImplementing<IScienceDataContainer>();
+            List<ModuleScienceExperiment> experis = parts.OfType<ModuleScienceExperiment>().ToList<ModuleScienceExperiment>();
+            List<ModuleScienceContainer> conts = parts.OfType<ModuleScienceContainer>().ToList<ModuleScienceContainer>();
+            List<ModuleScienceLab> labs = FlightGlobals.ActiveVessel.FindPartModulesImplementing<ModuleScienceLab>();
+            List<IScienceDataTransmitter> radios = FlightGlobals.ActiveVessel.FindPartModulesImplementing<IScienceDataTransmitter>();
 
-            Debug.Log("GA Vessel science containers:");
-            int partCount = 0;
-            foreach (IScienceDataContainer cont in conts)
-            {
-                PartModule partModule = cont as PartModule; //hooray for C# safe downcasting
-                if (partModule != null)
-                {
-                    Debug.Log(partCount++ + " " + partModule.name);
+            Debug.Log("GA Experi:");
+            int count = 0;
+            experis.ForEach(part => Debug.Log(count++ + part.name));
 
-                    int dataCount = 0;
-                    ScienceData[] datas = cont.GetData();
-                    foreach (ScienceData data in datas)
-                    {
-                        Debug.Log("\t" + dataCount++.ToString() + " " + data.title);
-                    }
-                }
-            }
+            Debug.Log("GA Containers:");
+            count = 0;
+            conts.ForEach(part => Debug.Log(count++ + part.name));
+
+            Debug.Log("GA labs:");
+            count = 0;
+            labs.ForEach(part => Debug.Log(count++ + part.name));
+
+            Debug.Log("GA radios:");
+            count = 0;
+            radios.ForEach(part => Debug.Log(count++ + part.ToString()));
+
+            
+            //count = 0;
+            //ScienceData[] datas = cont.GetData();
+            //foreach (ScienceData data in datas)
+            //{
+            //    Debug.Log("\t" + dataCount++.ToString() + " " + data.title);
+            //}
         }
 
         public void OnEnable()
