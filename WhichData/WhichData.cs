@@ -1099,16 +1099,29 @@ namespace WhichData
 
         //return whether to delete from m_selectedPages
         public bool ProcessDiscardData(DataPage page) { page.m_kspPage.OnDiscardData(page.m_kspPage.pageData); return true; } //always delete cause always succeed
-        public bool ProcessTransmitData(DataPage page) { page.m_kspPage.OnTransmitData(page.m_kspPage.pageData); return true; } //always delete cause always succeed
+        public bool ProcessTransmitData(DataPage page)
+        {
+            //HACKJEFFGIFFEN
+            //page.m_kspPage.OnTransmitData(page.m_kspPage.pageData); return true; } //always delete cause always succeed
+            List<ModuleDataTransmitter> radios = FlightGlobals.ActiveVessel.FindPartModulesImplementing<ModuleDataTransmitter>();
+            List<ScienceData> dataList = new List<ScienceData>();
+            dataList.Add( page.m_kspPage.pageData);
+            radios[0].TransmitData( dataList );
+            return true;
+        }
+        public void DonePrint(ScienceData dat) { Debug.Log("GA DonePrint: " + dat.subjectID); }
         public bool ProcessLabData(DataPage page)
         {
             bool labbed = false;
             //partial selection can happen for lab copies
             if (page.m_kspPage.showLabOption)
             {
-                try { page.m_kspPage.OnSendToLab(page.m_kspPage.pageData); }
-                catch { } //the callback tries to dismiss the murdered ExperimentsResultDialog here, can't do much but catch.
-
+                //HACKJEFFGIFFEN
+                //try { page.m_kspPage.OnSendToLab(page.m_kspPage.pageData); }
+                //catch { } //the callback tries to dismiss the murdered ExperimentsResultDialog here, can't do much but catch.
+                List<ModuleScienceLab> labs = FlightGlobals.ActiveVessel.FindPartModulesImplementing<ModuleScienceLab>();
+                StartCoroutine( labs[0].ProcessData( page.m_kspPage.pageData, DonePrint ) );
+                
                 labbed = true;
             }
 
