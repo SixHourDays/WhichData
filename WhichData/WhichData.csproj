@@ -52,6 +52,8 @@
     </Reference>
   </ItemGroup>
   <ItemGroup>
+    <Compile Include="GUIView.cs" />
+    <Compile Include="ShipModel.cs" />
     <Compile Include="WhichData.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
   </ItemGroup>

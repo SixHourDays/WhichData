@@ -5,13 +5,14 @@ using System.Text;
 using UnityEngine;
 using System.Reflection;
 using System.IO;
+using System.Collections;
 
 namespace WhichData
 {
     public class DataPage
     {
         //ksp data
-        public ExperimentResultDialogPage m_kspPage;
+        public ScienceData m_scienceData;
         public ScienceSubject m_subject;
         public IScienceDataContainer m_dataModule;
 
@@ -23,8 +24,8 @@ namespace WhichData
 
         //hud state
         public int m_index = 0; //into m_dataPages
-        public bool m_rowButton = false;
         public bool m_selected = false;
+        public bool m_rowButton = false;
 
         //hud display (truncated values, formatted strings etc)
         public string m_dataFieldDataMsg;
@@ -41,37 +42,45 @@ namespace WhichData
         public string m_labBtnData;
 
         //hacks 1
-        public float m_sciHack = 0.5f;
-
-        public DataPage(ExperimentResultDialogPage page)
+        public float m_sciHack = 2.0f;
+                public DataPage(ScienceData sciData, IScienceDataContainer hostPart )
         {
-            m_kspPage = page;
-            m_subject = ResearchAndDevelopment.GetSubjectByID(m_kspPage.pageData.subjectID);
+            m_scienceData = sciData;
+            m_subject = ResearchAndDevelopment.GetSubjectByID(m_scienceData.subjectID);
             //ModuleScienceContainer and ModuleScienceExperiment subclass this
-            m_dataModule = m_kspPage.host.FindModuleImplementing<IScienceDataContainer>();
+            m_dataModule = hostPart;
 
             //compose data used in row display
-            m_rcvrPrcnt = m_kspPage.scienceValue * m_sciHack / m_subject.scienceCap; //shows this experi's value vs max possible
+            //displayed science in KSP is always 2x the values used in bgr
+            float fullValue = ResearchAndDevelopment.GetScienceValue(m_scienceData.dataAmount, m_subject, 1.0f);
+            m_rcvrValue = (fullValue * m_sciHack).ToString("F1");
+            m_rcvrPrcnt = fullValue / m_subject.scienceCap;
+            float transmitValue = ResearchAndDevelopment.GetScienceValue(m_scienceData.dataAmount, m_subject, m_scienceData.transmitValue);
+            m_trnsValue = (transmitValue * m_sciHack).ToString("F1");
+            m_trnsPrcnt = transmitValue / m_subject.scienceCap;
+            /*m_rcvrPrcnt = m_kspPage.scienceValue * m_sciHack / m_subject.scienceCap; //shows this experi's value vs max possible
             m_trnsPrcnt = m_kspPage.transmitValue * m_sciHack / m_subject.scienceCap; //TODOJEFFGIFFEN AAAAUGH why god why (always too low)
             m_rcvrValue = m_kspPage.scienceValue.ToString("F1");
             m_trnsValue = m_kspPage.transmitValue.ToString("F1");
-
+            */
             //compose data used in info pane (classic dialog fields)
-            m_dataFieldDataMsg = "Data Size: " + m_kspPage.dataSize.ToString("F1") + " Mits";
-            m_dataFieldTrnsWarn = m_kspPage.showTransmitWarning ? "Inoperable after Transmitting." : string.Empty;
+            m_dataFieldDataMsg = "Data Size: " + m_scienceData.dataAmount.ToString("F1") + " Mits";
+            //HACKJEFFGIFFEN
+            m_dataFieldTrnsWarn = /*m_kspPage.showTransmitWarning ? "Inoperable after Transmitting." :*/ string.Empty;
             m_rcvrFieldMsg = "Recovery: +" + m_rcvrValue + " Science";
+            //TODOJEFFGIFFEN whaaaaat
             m_rcvrFieldBackBar = 1.0f - m_subject.science / m_subject.scienceCap; //shows this experi's value when done next time vs max possible
             m_trnsFieldMsg = "Transmit: +" + m_trnsValue + " Science";
-            m_trnsFieldBackBar = m_rcvrFieldBackBar * m_kspPage.xmitDataScalar;
-            m_transBtnPerc = (m_trnsPrcnt >= 0.1f ? m_kspPage.xmitDataScalar * 100 : 0.0f).ToString("F0") + "%"; //if transmit sci is 0pts, then % is 0
-            m_labBtnData = "+" + m_kspPage.pageData.labValue.ToString("F0");
+            m_trnsFieldBackBar = m_rcvrFieldBackBar * m_scienceData.transmitValue;
+            m_transBtnPerc = (m_trnsPrcnt >= 0.1f ? m_scienceData.transmitValue * 100 : 0.0f).ToString("F0") + "%"; //if transmit sci is 0pts, then % is 0
+            m_labBtnData = "+" + m_scienceData.labValue.ToString("F0");
 
             //parse out subjectIDs of the form (we ditch the @):
             //  crewReport@KerbinSrfLandedLaunchPad
             m_experi = m_body = m_situ = m_biome = string.Empty;
 
             //experiment
-            string[] strings = m_kspPage.pageData.subjectID.Split('@');
+            string[] strings = m_scienceData.subjectID.Split('@');
             m_experi = strings[0];                                                  // crewReport
 
             //body
@@ -88,7 +97,7 @@ namespace WhichData
             }
             if (m_body == string.Empty)
             {
-                Debug.Log("GA ERROR no body in id " + m_kspPage.pageData.subjectID);
+                Debug.Log("GA ERROR no body in id " + m_scienceData.subjectID);
             }
 
             //situation
@@ -104,7 +113,7 @@ namespace WhichData
             }
             if (m_situ == string.Empty)
             {
-                Debug.Log("GA ERROR no situ in id " + m_kspPage.pageData.subjectID);
+                Debug.Log("GA ERROR no situ in id " + m_scienceData.subjectID);
             }
 
             //biome
@@ -161,202 +170,54 @@ namespace WhichData
     [KSPAddon(KSPAddon.Startup.Flight, false)] //simple enough we can just exist in flight, new instance / scene
     public class WhichData : MonoBehaviour
     {
-        public WhichData()
-        {
-            m_callCount = 0;
-            Debug.Log("GA " + m_callCount++);
-        }
+        private ShipModel m_shipModel = new ShipModel();
+        private GUIView m_GUIView = new GUIView();
 
-        int m_callCount;
-
-        //dock
-        public void OnPartCouple(GameEvents.FromToAction<Part, Part> action) { Debug.Log("GA part couple"); }
-        //undock, shear part off, decouple, destroy (phys parts)
-        public void OnPartJointBreak(PartJoint joint) { Debug.Log("GA part joint break"); ScanShip(); }
-        //destroy (including non-phys parts)
-        public void OnPartDie(Part part) { Debug.Log("GA part die"); }
-
-        public void OnCrewBoardVessel(GameEvents.FromToAction<Part,Part> action) { Debug.Log("GA crew board"); }
-        public void OnCrewEva(GameEvents.FromToAction<Part,Part> action) { Debug.Log("GA crew eva"); }
-        public void OnCrewKilled(EventReport report) { Debug.Log("GA crew killed"); }
-        //public static EventData<GameEvents.HostedFromToAction<ProtoCrewMember, Part>> onCrewTransferred; //lab funtions altering when 2/2?
-        
-        public void OnExperimentDeployed(ScienceData data) {Debug.Log("GA experi deploy");}
-
-        //UI
-        //public static EventVoid onHideUI; //should respond to this if its not forced
-        //public static EventVoid onShowUI;
-        //public static EventData<Part> onPartActionUICreate; //anytime right cick menu opens (mess with data name?)
-        //public static EventData<Part> onPartActionUIDismiss;
-
-        //from ModuleScienceContainer...
-        //CollectDataExternalEvent
-        //ReviewDataEvent
-        //StoreDataExternalEvent
-
-        /*[KSPEvent( guiName = "WHOOP" ) ]
-        public void Review()
-        {
-            Debug.Log("GA " + m_callCount++ + " Review()");
-        }
-        */
-
+        //first call after ctr, so we do init here
         public void Awake()
         {
-            Debug.Log("GA " + m_callCount++ + " Awake*()");
-
-            GameEvents.onPartCouple.Add(OnPartCouple);
-            GameEvents.onPartJointBreak.Add(OnPartJointBreak);
-            GameEvents.onPartDie.Add(OnPartDie);
-            
-            GameEvents.onCrewBoardVessel.Add(OnCrewBoardVessel);
-            GameEvents.onCrewOnEva.Add(OnCrewEva);
-            GameEvents.onCrewKilled.Add(OnCrewKilled);
-            //GameEvents.onCrewTransferred.Add(OnCrewTransferred);
-                        
-            GameEvents.OnExperimentDeployed.Add( OnExperimentDeployed );
-            
-        }
-
-        public void ScanShip()
-        {
-            Debug.Log("GA Vessel Scan");
-            
-            //break this up into some specifics
-            //firstly, experiments
-            List<IScienceDataContainer> parts = FlightGlobals.ActiveVessel.FindPartModulesImplementing<IScienceDataContainer>();
-            List<ModuleScienceExperiment> experis = parts.OfType<ModuleScienceExperiment>().ToList<ModuleScienceExperiment>();
-            List<ModuleScienceContainer> conts = parts.OfType<ModuleScienceContainer>().ToList<ModuleScienceContainer>();
-            List<ModuleScienceLab> labs = FlightGlobals.ActiveVessel.FindPartModulesImplementing<ModuleScienceLab>();
-            List<IScienceDataTransmitter> radios = FlightGlobals.ActiveVessel.FindPartModulesImplementing<IScienceDataTransmitter>();
-
-            Debug.Log("GA Experi:");
-            int count = 0;
-            experis.ForEach(part => Debug.Log(count++ + part.name));
-
-            Debug.Log("GA Containers:");
-            count = 0;
-            conts.ForEach(part => Debug.Log(count++ + part.name));
-
-            Debug.Log("GA labs:");
-            count = 0;
-            labs.ForEach(part => Debug.Log(count++ + part.name));
-
-            Debug.Log("GA radios:");
-            count = 0;
-            radios.ForEach(part => Debug.Log(count++ + part.ToString()));
-
-            
-            //count = 0;
-            //ScienceData[] datas = cont.GetData();
-            //foreach (ScienceData data in datas)
-            //{
-            //    Debug.Log("\t" + dataCount++.ToString() + " " + data.title);
-            //}
-        }
-
-        public void OnEnable()
-        {
-            Debug.Log("GA " + m_callCount++ + " OnEnable()");
-        }
-
-        public void Start()
-        {
-            Debug.Log("GA " + m_callCount++ + " Start()");
-//Unity 4pro or 5 needed for asset bundles
-/*            string absPath = "whichdataassetbundle";
-
-            Debug.Log("app.dataPath " + Application.dataPath); //KSP_Data is where it is
-            Uri uri = new Uri(Assembly.GetExecutingAssembly().CodeBase);
-            Debug.Log("uri abspath " + uri.AbsolutePath);
-            string absPath = Path.Combine( Path.GetDirectoryName(uri.AbsolutePath), "whichdataassetbundle" );
-            absPath = absPath.Replace("\\","/"); //escape backslash
-            Debug.Log("abspath " + absPath);
-            
-
-            AssetBundle gui = AssetBundle.CreateFromFile(absPath);
-            if (gui)
+            Debug.Log("GA WhichData::Awake");
+            //initialize sub components.
             {
-                Debug.Log("GA " + m_callCount++ + " Start()");
-                GameObject proto = gui.Load("Canvas") as GameObject;
-                if (proto)
+                string error = m_shipModel.Initialize();
+                if (error != string.Empty)
                 {
-                    Debug.Log("GA " + m_callCount++ + " Start()");
-                    m_test = Instantiate(proto) as GameObject;
-                    Debug.Log("GA " + m_callCount++ + " Start()");
+                    //They can fail, cascading a cleanup & shutdown of the mod.
+                    //TODOJEFFGIFFEN teardown
+                    Debug.Log("Giffen Aerospace WhichData error: " + error);
                 }
-                gui.Unload(false);
-                Debug.Log("GA " + m_callCount++ + " Start()");
+
+                error = m_GUIView.Initialize();
+                if (error != string.Empty)
+                {
+                    //They can fail, cascading a cleanup & shutdown of the mod.
+                    //2x TODOJEFFGIFFEN teardown
+                    Debug.Log("Giffen Aerospace WhichData error: " + error);
+                }
             }
-*/
+
+            //passthrough the Awake event
+            {
+                m_shipModel.OnAwake();
+                m_GUIView.OnAwake();
+            }
         }
 
-        //hacks
-        public float m_barMinPx = 7.0f;
+        public void OnDestroy()
+        {
+            m_shipModel.OnDestroy();
+            m_GUIView.OnDestroy();
 
-        //window pixel positions etc
-        //default window in 1920x1080 is at 243, 190, 413x240 (10px of grey round thinger at left)
-        //500px of list pane, 413 of info pane ( -10 left grey thing -9 fat left pad of info. y+60 for 'all' button height //HACKJEFFGIFFEN
-        public Rect m_window = new Rect(243, 190, 500 + 394, 240 + 64);
-        public Rect m_listPaneRect = new Rect(6, 6, 500 - 6 * 2, 240 + 64 - 6 * 2); //y origin is m_padding really
-        //6px border all around.  Then 14px of window title, 6px again below it to sync to orig window top.
-        public Rect m_infoPaneRect = new Rect(500 + 3, 6, 391 - 3, 240 + 64 - 6 * 2); //note, top/bottom pad, 3 combined w list's 6 = 9 left pad.  no right pad (made of dropshadow).
-        public int m_padding = 6;
-        public int m_leftColumnWidth = 325;
-        public int m_barToEndPad = 2;
-        public Color m_inopWarnOrange = new Color(1.0f, 0.63f, 0.0f); //orangey gold
-        public int m_listFieldMaxHeight = 22;  //height of each list row. min be 18, helps with click probability some
+        }
         
-        //state from ksp
-        public GUIStyle m_stylePrevPage;
-        public GUIStyle m_styleDiscardButton;
-        public GUIStyle m_styleKeepButton;
-        public GUIStyle m_styleTransmitButton;
-        public GUIStyle m_styleTooltips;
-        public GUIStyle m_styleNextPage;
-        public GUIStyle m_styleRfIcons;      //result field
-        public GUIStyle m_styleRfText;       //
-        public GUIStyle m_styleRfBackground; //
-        public GUIStyle m_stylePrgBarBG;
-        public GUIStyle m_stylePrgBarDarkGreen;
-        public GUIStyle m_stylePrgBarLightGreen;
-        public GUIStyle m_stylePrgBarDarkBlue;
-        public GUIStyle m_stylePrgBarLightBlue;
-        public GUIStyle m_styleLabButton;
-        public GUIStyle m_styleResetButton;
-        public float m_pageButtonPadding;
-        public float m_pageButtonSize;
-        public float m_progressBarWidth;
-        public float m_rightSideWidth;
-        GUISkin m_dlgSkin;
+        
 
-        //GUI state
-        public bool m_prevBtDown = false;
-        public bool m_nextBtDown = false;
-        public bool m_closeBtn = false;
-        public bool m_discardBtn = false;
-        public bool m_moveBtn = false;
-        public bool m_moveBtnEnabled = false;
-        public bool m_labBtn = false;
-        public bool m_labBtnEnabled = false;
-        public bool m_transmitBtn = false;
-        public bool m_transmitBtnEnabled = false;
-
-        public Vector2 m_scrollPos;
-        public Texture2D m_dataIcon = null;
-        public Texture2D m_scienceIcon = null;
-        public GUIStyle m_closeBtnStyle = new GUIStyle();
-        public GUIStyle m_moveBtnStyle = new GUIStyle();
-
-        public string m_titleBar;
-        public string m_boxMsg;
-        public Action m_layoutInfoPaneBody; //really just enable disable the oldschool bars at bottom of box
-        public string m_labBtnMsg;
-        public string m_transmitBtnMsg;
+        
 
 
+//HACKJEFFGIFFEN
         //generic comparer for a < b is -1, a == b is 0, a > b is 1
-        public static int Compare<T>(T x, T y) where T : IComparable { return x.CompareTo(y); }
+/*        public static int Compare<T>(T x, T y) where T : IComparable { return x.CompareTo(y); }
 
         //mod state
         //sortfields, lambdas dictating member to compare on
@@ -370,350 +231,37 @@ namespace WhichData
             new SortField("Situation",      (x, y) => Compare(x.m_situ, y.m_situ)),
             new SortField("Celes. Body",    (x, y) => Compare(x.m_body, y.m_body))
         };
-        bool m_dirtySelection = false;
-        public List<DataPage> m_selectedPages = new List<DataPage>();
+*/        bool m_dirtySelection = false;
+//        public List<DataPage> m_selectedPages = new List<DataPage>();
         bool m_dirtyPages = false;
         public List<DataPage> m_dataPages = new List<DataPage>();
-        public RankedSorter m_rankSorter = new RankedSorter();
+//        public RankedSorter m_rankSorter = new RankedSorter();
+//      HACKJEFFGIFFEN
+        bool ready = false;
 
-        void OnGUI()
+        public void OnGUI()
         {
-            if (m_state == State.Alive)
+           //HACKJEFFGIFFEN
+           //if (m_state == State.Alive)
+            if ( ready )
             {
-                int uid = GUIUtility.GetControlID(FocusType.Passive); //get a nice unique window id from system
-                GUI.skin = m_dlgSkin;
-                m_window = GUI.Window(uid, m_window, WindowLayout, "", HighLogic.Skin.window); //style
+                m_GUIView.OnGUI();
             }
         }
 
-
-
-        void WindowLayout(int windowID)
-        {
-            //  TODOJEFFGIFFEN
-            //  make transmit light blue just be 5 px back off dark blue
-
-            GUILayout.BeginArea(m_listPaneRect/*, HighLogic.Skin.window*/);
-            {
-                LayoutListToggles();
-                LayoutListFields();
-
-            } GUILayout.EndArea();
-
-            GUILayout.BeginArea(m_infoPaneRect/*, m_dlgSkin.window*/);
-            {
-                GUILayout.BeginVertical();
-                {
-                    LayoutTitleBar();
-
-                    GUILayout.BeginHorizontal();
-                    {
-                        //Main left column
-                        m_layoutInfoPaneBody();
-
-                        //Rightside button column
-                        LayoutActionButtons();
-
-                    } GUILayout.EndHorizontal();
-
-                } GUILayout.EndVertical();
-
-            } GUILayout.EndArea();
-
-            //must be last or it disables all the widgets etc
-            GUI.DragWindow();
-        }
-
-        public void LayoutListToggles()
-        {
-            GUILayout.BeginHorizontal();
-            {
-                //sorter toggles
-                foreach (SortField sf in m_sortFields)
-                {
-                    sf.m_guiToggle = GUILayout.Toggle(sf.m_guiToggle, sf.m_text, HighLogic.Skin.button); //want a ksp button not the fat rslt dlg button
-                }
-            } GUILayout.EndHorizontal();
-        }
-
-        public void LayoutListFields()
-        {
-            GUIStyle ngs = new GUIStyle(m_dlgSkin.scrollView); //HACKJEFFGIFFEN
-            ngs.padding = new RectOffset(0, 0, 0, 0); //get rid of stupid left pad
-            m_scrollPos = GUILayout.BeginScrollView(m_scrollPos, ngs);
-            {
-                GUIStyle listField = new GUIStyle(m_dlgSkin.box);
-                listField.padding = new RectOffset(0, 0, 0, 0); //nerf padding
-                GUIContent nothing = new GUIContent();
-                Color oldColor = GUI.color;
-                foreach (DataPage pg in m_dataPages)
-                {
-                    GUI.color = pg.m_selected ? Color.yellow : Color.white;
-                    pg.m_rowButton = GUILayout.Button(nothing, listField, GUILayout.MaxHeight(m_listFieldMaxHeight));
-                    Rect btRect = GUILayoutUtility.GetLastRect();
-                    {
-                        //experi, rec sci/%max, trns sci/%max, data mits, biome, sit, body
-                        //not atm lab points, disabling
-                        const int fields = 7; //skip lab pts
-                        float fieldWidth = btRect.width / fields;
-                        Rect walker = btRect;
-                        walker.width = fieldWidth;
-
-                        //experi
-                        GUI.color = Color.white;
-                        GUIStyle cliptext = new GUIStyle(m_styleRfText); //HACKJEFFGIFFEN
-                        cliptext.clipping = TextClipping.Clip;
-                        GUI.Label(walker, pg.m_experi, cliptext);
-                        walker.x += walker.width;
-
-                        //recvr
-                        GUI.color = Color.green;
-                        string recvrString = pg.m_rcvrValue + "/" + (pg.m_rcvrPrcnt * 100).ToString("F0") + "%";
-                        GUI.Label(walker, recvrString, m_styleRfText);
-                        walker.x += walker.width;
-
-                        //trans
-                        GUI.color = Color.cyan;
-                        string trnsString = pg.m_trnsValue + "/" + (pg.m_trnsPrcnt * 100).ToString("F0") + "%";
-                        GUI.Label(walker, trnsString, m_styleRfText);
-                        walker.x += walker.width;
-
-                        //data mits
-                        GUI.color = Color.white;
-                        GUI.Label(walker, pg.m_kspPage.dataSize + " Mits", m_styleRfText);
-                        walker.x += walker.width;
-
-                        //disabling
-                        //GUI.Label(walker, pg.showTransmitWarning ? "Disbl" : "-", m_styleRfText);
-                        //walker.x += walker.width;
-
-                        //biome
-                        GUI.Label(walker, pg.m_biome == string.Empty ? "Global" : pg.m_biome, m_styleRfText);
-                        walker.x += walker.width;
-
-                        //situ
-                        GUI.Label(walker, pg.m_situ, m_styleRfText);
-                        walker.x += walker.width;
-
-                        //body
-                        GUI.Label(walker, pg.m_body, m_styleRfText);
-                        walker.x += walker.width;
-
-                    }
-                }
-                GUI.color = oldColor;
-
-            } GUILayout.EndScrollView();
-        }
-
-        public void LayoutTitleBar()
-        {
-            GUILayout.BeginHorizontal();
-            {
-                //m_prevBtDown = GUILayout.Button("", m_stylePrevPage, GUILayout.Width(m_pageButtonSize), GUILayout.Height(m_pageButtonSize + m_pageButtonPadding));
-                GUILayout.Label(m_titleBar);
-                //m_nextBtDown = GUILayout.Button("", m_styleNextPage, GUILayout.Width(m_pageButtonSize), GUILayout.Height(m_pageButtonSize + m_pageButtonPadding));
-                m_closeBtn = GUILayout.Button("", m_closeBtnStyle);
-
-            } GUILayout.EndHorizontal();
-            
-            GUILayout.Space(4); //HACKJEFFGIFFEN to align with the list pane's top
-        }
-
-        public void LayoutActionButtons()
-        {
-            GUILayout.BeginVertical(GUILayout.Width(m_rightSideWidth));
-            {
-                //HACKJEFFGIFFEN tooltips missing: old attempts at the tooltips...why dont you love me WHY
-                //GUI.tooltip = "Discard Data";
-                //GUILayout.Button(new GUIContent("", "Discard Data"), m_styleDiscardButton);
-                m_discardBtn = GUILayout.Button("", m_styleDiscardButton);
-                Color oldColor = GUI.color;
-                GUI.color = m_moveBtnEnabled ? Color.white : Color.grey; //HACKJEFFGIFFEN crap, need a state
-                m_moveBtn = GUILayout.Button("", m_moveBtnStyle);
-                GUI.color = m_labBtnEnabled ? Color.white : Color.grey; //HACKJEFFGIFFEN crap, need a state
-                m_labBtn = GUILayout.Button(m_labBtnMsg, m_styleLabButton);
-                GUI.color = m_transmitBtnEnabled ? Color.white : Color.grey; //HACKJEFFGIFFEN crap, need a state
-                m_transmitBtn = GUILayout.Button(m_transmitBtnMsg, m_styleTransmitButton);
-                GUI.color = oldColor;
-
-            } GUILayout.EndVertical();
-        }
-
-        public void LayoutBodySingle()
-        {
-            GUILayout.BeginVertical(/*GUILayout.Width(m_leftColumnWidth)*/); //width of left column from orig dialog
-            {
-                DataPage curPg = m_selectedPages.First();
-                //the skin's box GUIStyle already has the green text and nice top left align
-                GUILayout.Box(m_boxMsg);
-
-                LayoutInfoField(curPg);
-                LayoutRecoverScienceBarField(curPg);
-                LayoutTransmitScienceBarField(curPg);
-
-            } GUILayout.EndVertical();
-        }
-
-        public void LayoutBodyGroup()
-        {
-            GUILayout.BeginVertical(/*GUILayout.Width(m_leftColumnWidth)*/); //width of left column from orig dialog
-            {
-                //the skin's box GUIStyle already has the green text and nice top left align
-                GUILayout.Box(m_boxMsg); //HACKJEFFGIFFEN
-
-                //LayoutInfoField(curPg);
-                //LayoutRecoverScienceBarField(curPg);
-                //LayoutTransmitScienceBarField(curPg);
-            
-            } GUILayout.EndVertical();
-        }
-
-        public void LayoutInfoField(DataPage page)
-        {
-            GUILayout.BeginHorizontal(m_styleRfBackground);
-            {
-                GUILayout.Label( m_dataIcon, m_styleRfIcons );
-                GUILayout.Label( page.m_dataFieldDataMsg, m_styleRfText );
-                if (page.m_dataFieldTrnsWarn != string.Empty)
-                {
-                    Rect textRect = GUILayoutUtility.GetLastRect();
-                    TextAnchor oldAnchor = m_styleRfText.alignment;
-                    Color oldColor = GUI.color;
-
-                    Rect totalField = new Rect(m_leftColumnWidth - m_progressBarWidth - m_barToEndPad, textRect.yMin, m_progressBarWidth, textRect.height);
-                    m_styleRfText.alignment = TextAnchor.MiddleRight;
-                    GUI.color = m_inopWarnOrange;
-                    GUI.Label( totalField, page.m_dataFieldTrnsWarn, m_styleRfText);
-
-                    GUI.color = oldColor;
-                    m_styleRfText.alignment = oldAnchor;
-                     
-                }
-
-            } GUILayout.EndHorizontal();
-        }
-
-        public void LayoutRecoverScienceBarField( DataPage page )
-        {
-            //selecting the recover science strings & styles
-            LayoutScienceBarField( page.m_rcvrFieldMsg, page.m_rcvrPrcnt, page.m_rcvrFieldBackBar, m_stylePrgBarDarkGreen, m_stylePrgBarLightGreen );
-        }
-
-        public void LayoutTransmitScienceBarField( DataPage page )
-        {
-            //selecting the transmit science strings & styles
-            LayoutScienceBarField( page.m_trnsFieldMsg, page.m_trnsPrcnt, page.m_trnsFieldBackBar, m_stylePrgBarDarkBlue, m_stylePrgBarLightBlue );
-        }
-
-        public void LayoutScienceBarField( string text, float lightFillPrcnt, float darkFillPrcnt, GUIStyle darkBarStyle, GUIStyle lightBarStyle )
-        {
-             //info bars white text
-            GUIContent nothing = new GUIContent();
-
-            GUILayout.BeginHorizontal(m_styleRfBackground);
-            {
-                GUILayout.Label( m_scienceIcon, m_styleRfIcons );
-                GUILayout.Label( text, m_styleRfText);
-                Rect textRect = GUILayoutUtility.GetLastRect();                
-
-                //HACKJEFFGIFFEN 
-                Rect totalBar = new Rect(391 - m_rightSideWidth - m_progressBarWidth - 11/* - m_barToEndPad*/, textRect.yMin, m_progressBarWidth, textRect.height);
-                GUI.Box( totalBar, nothing, m_stylePrgBarBG );
-
-                //the bars need 7/130 or more to draw right (pad for the caps)
-                //if the light bar is invisible, the dark bar has no point.
-                float lightFillPx = lightFillPrcnt * m_progressBarWidth;
-                if (lightFillPx >= m_barMinPx)
-                {
-                    Rect darkBar = new Rect(totalBar);
-                    darkBar.width *= darkFillPrcnt;
-                    GUI.Box(darkBar, nothing, darkBarStyle);
-
-                    Rect lightBar = new Rect(totalBar);
-                    lightBar.width = lightFillPx;
-                    GUI.Box(lightBar, nothing, lightBarStyle);
-                }
-
-            } GUILayout.EndHorizontal();
-        }
+        //TODOJEFFGIFFEN pass on:
+        //  what toggles gui needs & states
+        //  list elements, and selectees
+        //  info button locks
+        //  mode of info pane single/group
+        //  appropriate box info, and bar info
+        
+        //TODOJEFFGIFFEN pass back:
+        //  toggle pushes on unlocked
+        //  list picks
+        //  info button pushes        
 
         
-
-        public void LazyInit()
-        {
-            m_dlgSkin = ExperimentsResultDialog.Instance.guiSkin;
-            //these are the custom styles inside the ExperimentsResultDialog
-            m_stylePrevPage =           m_dlgSkin.GetStyle("prev page");
-            m_styleDiscardButton =      m_dlgSkin.GetStyle("discard button");
-            m_styleKeepButton =         m_dlgSkin.GetStyle("keep button");
-            m_styleTransmitButton =     m_dlgSkin.GetStyle("transmit button");
-            m_styleTooltips =           m_dlgSkin.GetStyle("tooltips");
-            m_styleNextPage =           m_dlgSkin.GetStyle("next page");
-            m_styleRfIcons =            m_dlgSkin.GetStyle("icons");
-            m_styleRfText =             m_dlgSkin.GetStyle("iconstext");
-            m_styleRfBackground =       m_dlgSkin.GetStyle("resultfield");
-            m_stylePrgBarBG =           m_dlgSkin.GetStyle("progressBarBG");
-            m_stylePrgBarDarkGreen =    m_dlgSkin.GetStyle("progressBarFill");
-            m_stylePrgBarLightGreen =   m_dlgSkin.GetStyle("progressBarFill2");
-            m_stylePrgBarDarkBlue =     m_dlgSkin.GetStyle("progressBarFill3");
-            m_stylePrgBarLightBlue =    m_dlgSkin.GetStyle("progressBarFill4");
-            m_styleLabButton =          m_dlgSkin.GetStyle("lab button");
-            m_styleResetButton =        m_dlgSkin.GetStyle("reset button");
-
-            m_pageButtonPadding = ExperimentsResultDialog.Instance.pageButtonPadding;
-            m_pageButtonSize = ExperimentsResultDialog.Instance.pageButtonSize;
-            m_progressBarWidth = ExperimentsResultDialog.Instance.progressBarWidth;
-            m_rightSideWidth = ExperimentsResultDialog.Instance.rightSideWidth;
-            //m_tooltipOffset = ExperimentsResultDialog.Instance.tooltipOffset;
-
-            //find and use the existing textures from the orig dlg
-            Texture2D[] textures = Resources.FindObjectsOfTypeAll<Texture2D>();
-            m_dataIcon = textures.First<Texture2D>(t => t.name == "resultsdialog_datasize");
-            m_scienceIcon = textures.First<Texture2D>(t => t.name == "resultsdialog_scivalue");
-
-            m_closeBtnStyle.margin = new RectOffset(6, 6, 0, 0); //top pad from window, bottom irrelevant
-            m_closeBtnStyle.fixedWidth = m_closeBtnStyle.fixedHeight = 25.0f;
-            m_closeBtnStyle.normal.background = GameDatabase.Instance.GetTexture("SixHourDays/closebtnnormal", false);
-            m_closeBtnStyle.hover.background = GameDatabase.Instance.GetTexture("SixHourDays/closebtnhover", false);
-            m_closeBtnStyle.active.background = GameDatabase.Instance.GetTexture("SixHourDays/closebtndown", false);
-
-            m_moveBtnStyle.margin = new RectOffset(7, 1, 2, 2);
-            m_moveBtnStyle.fixedWidth = m_moveBtnStyle.fixedHeight = 55.0f;
-            m_moveBtnStyle.normal.background = GameDatabase.Instance.GetTexture("SixHourDays/movebtnnormal", false);
-            m_moveBtnStyle.hover.background = GameDatabase.Instance.GetTexture("SixHourDays/movebtnhover", false);
-            m_moveBtnStyle.active.background = GameDatabase.Instance.GetTexture("SixHourDays/movebtndown", false);
-
-            //CelestialBody minmus = ScaledSpace.Instance.gameObject.transform.FindChild("Minmus").GetComponent<CelestialBody>();
-            /*Debug.Log("GA " + m_callCount++ + " bodies");
-            List<CelestialBody> bodies = FlightGlobals.Bodies;
-            foreach( CelestialBody body in bodies )
-            {
-                Debug.Log("GA - " + body.name);
-                
-                List<string> biomeTags = ResearchAndDevelopment.GetBiomeTags( body );
-                foreach( string biomeTag in biomeTags )
-                {
-                    Debug.Log("GA - - " + biomeTag );
-                }
-            }
-
-            //TODOJEFFGIFFEN  incomplete??!
-            Debug.Log("GA " + m_callCount++ + " biome tags");
-            List<string> situTags = ResearchAndDevelopment.GetSituationTags();
-            foreach (string situTag in situTags)
-            {
-                Debug.Log("GA - " + situTag);
-            }
-
-            Debug.Log("GA " + m_callCount++ + " subjects");
-            List<ScienceSubject> subjects = ResearchAndDevelopment.GetSubjects();
-            foreach (ScienceSubject s in subjects)
-            {
-                Debug.Log("GA - " + s.id);
-            }
-            */
-        }
 
         void HighlightPart(Part part, Color color)
         {
@@ -755,9 +303,44 @@ namespace WhichData
         State m_state = State.Daemon;
         ScreenMessage m_scrnMsg = null;
 
+        //HACKJEFFGIFFEN
+        int waitCount = 0;
         public void Update()
         {
-            switch (m_state)
+            if (!ready)
+            {
+                while (ResearchAndDevelopment.Instance == null)
+                {
+                    ++waitCount;
+                    return;
+                }
+                Debug.Log("Update blocked on R&D for " + waitCount + " frames");
+                ready = true;
+            }
+
+            m_shipModel.Update();
+            m_GUIView.Update();
+
+            ShipModel.Flags flags = m_shipModel.dirtyFlags;
+            //ok so you know what changed on ship.  controller should populate GUI
+            if (flags.scienceDatasDirty)
+            {
+                m_dataPages.Clear();
+                //HACKJEFFGIFFEN the selected need preserved across this
+                foreach (ScienceData sciData in m_shipModel.m_scienceDatas)
+                {
+                    IScienceDataContainer part = m_shipModel.m_sciDataParts[sciData];
+                    m_dataPages.Add(new DataPage(sciData, part));
+                }
+
+                //HACKJEFFGIFFEN stupid pass
+                m_GUIView.m_copyDataPages = m_dataPages;
+
+                m_dirtyPages = true; //new pages means we need to resort
+            }
+
+            //HACKJEFFGIFFEN old below
+/*            switch (m_state)
             {
                 case State.Picker:
                 {
@@ -813,7 +396,7 @@ namespace WhichData
                     if (m_closeBtn)
                     {
                         //note close means "keep" for everything
-                        m_dataPages.ForEach(pg => pg.m_kspPage.OnKeepData(pg.m_kspPage.pageData));
+                        m_dataPages.ForEach(pg => pg.m_kspPage.OnKeepData(pg.m_scienceData));
                         m_dataPages.Clear();
                         m_selectedPages.Clear();
                         m_dirtySelection = true;
@@ -885,13 +468,7 @@ namespace WhichData
             //when dialog is spawned, steal its data and kill it
             if (ExperimentsResultDialog.Instance != null)
             {
-                //lazy copy of assets from ksp on first run
-                if (m_dlgSkin == null) { LazyInit(); }
-
-                //copy result pages to our collection
-                ExperimentsResultDialog.Instance.pages.ForEach( newPage => m_dataPages.Add(new DataPage(newPage)) );
-                m_dirtyPages = true; //new pages means we need to resort
-
+                //HACKJEFFGIFFEN subsumed basically all this
                 //get rid of original dialog
                 Destroy(ExperimentsResultDialog.Instance.gameObject); //1 frame up still...ehh
             }
@@ -1076,7 +653,7 @@ namespace WhichData
                 }
                 default: break;
             }
-
+*/
             /*Debug.Log("GA dataSize " + curPg.dataSize);
                 Debug.Log("GA refValue " + curPg.refValue);
                 Debug.Log("GA scienceValue " + curPg.scienceValue);
@@ -1098,7 +675,8 @@ namespace WhichData
         }
 
         //return whether to delete from m_selectedPages
-        public bool ProcessDiscardData(DataPage page) { page.m_kspPage.OnDiscardData(page.m_kspPage.pageData); return true; } //always delete cause always succeed
+//HACKJEFFGIFFEN
+/*        public bool ProcessDiscardData(DataPage page) { page.m_kspPage.OnDiscardData(page.m_kspPage.pageData); return true; } //always delete cause always succeed
         public bool ProcessTransmitData(DataPage page)
         {
             //HACKJEFFGIFFEN
@@ -1133,7 +711,7 @@ namespace WhichData
             //a partial selection can contain src==dst selectees, skip em
             if (page.m_kspPage.host != dstPart)
             {
-                ScienceData sciData = page.m_kspPage.pageData;
+                ScienceData sciData = page.m_scienceData;
                 //all destinations will have ModuleScienceContainer modules (dst cannot be experi)
                 ModuleScienceContainer dstCont = dstPart.GetComponent<ModuleScienceContainer>();
 
@@ -1164,26 +742,10 @@ namespace WhichData
             m_dirtyPages = true; //removed some, need to re-index remaining
             m_dirtySelection = true; //need to default select, and update info pane
         }
-
+*/
         public void OnDisable()
         {
-            Debug.Log("GA " + m_callCount++ + " OnDisable()");
-        }
-
-        public void OnDestroy()
-        {
-            Debug.Log("GA " + m_callCount++ + " OnDestroy()");
-
-            GameEvents.onPartCouple.Remove(OnPartCouple);
-            GameEvents.onPartJointBreak.Remove(OnPartJointBreak);
-            GameEvents.onPartDie.Remove(OnPartDie);
-
-            GameEvents.onCrewBoardVessel.Remove(OnCrewBoardVessel);
-            GameEvents.onCrewOnEva.Remove(OnCrewEva);
-            GameEvents.onCrewKilled.Remove(OnCrewKilled);
-            //GameEvents.onCrewTransferred.Remove(OnCrewTransferred);
-
-            GameEvents.OnExperimentDeployed.Remove(OnExperimentDeployed);
+//            Debug.Log("GA " + m_callCount++ + " OnDisable()");
         }
     }
 }
