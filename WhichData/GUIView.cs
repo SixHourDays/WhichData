@@ -6,6 +6,68 @@ using UnityEngine;
 
 namespace WhichData
 {
+    public class ViewPage
+    {
+        //ksp data
+        public DataPage m_src; //TODOJEFFGIFFEN
+
+        //hud state
+        public int m_index = 0; //into m_dataPages
+        public bool m_selected = false;
+        public bool m_rowButton = false;
+
+        //hud display (truncated values, formatted strings etc)
+        public string title => m_src.m_subject.title;
+        public string experiment => m_src.m_experi;
+        public string body => m_src.m_body;
+        public string situation => m_src.m_situ;
+        public string biome => m_src.m_biome == string.Empty ? "Global" : m_src.m_biome;
+        public float mits => m_src.m_scienceData.dataAmount;
+        public string m_boxText;
+        public string m_dataFieldDataMsg;
+        public string m_dataFieldTrnsWarn;
+        public string m_rcvrValue; //1 decimal accuracy
+        public float m_rcvrPrcnt;
+        public string m_rcvrFieldMsg;
+        public float m_rcvrFieldBackBar;
+        public string m_trnsValue; //1 decimal accuracy
+        public float m_trnsPrcnt;
+        public string m_trnsFieldMsg;
+        public float m_trnsFieldBackBar;
+        public string m_transBtnPerc; //0% when sci is 0 pts, and integer % otherwise
+        public string m_labBtnData;
+
+        //hacks 1
+        public float m_sciHack = 2.0f;
+        public ViewPage(DataPage src)
+        {
+            m_src = src;
+            ScienceSubject subject = m_src.m_subject;
+            ScienceData data = m_src.m_scienceData;
+
+            m_boxText = ResearchAndDevelopment.GetResults(subject.id);
+            //compose data used in row display
+            //displayed science in KSP is always 2x the values used in bgr
+            m_rcvrValue = (m_src.m_fullValue * m_sciHack).ToString("F1");
+            m_rcvrPrcnt = m_src.m_fullValue / subject.scienceCap;
+
+            float transmitValue = m_src.m_transmitValue * m_sciHack;
+            m_trnsValue = transmitValue.ToString("F1");
+            m_trnsPrcnt = m_src.m_transmitValue / subject.scienceCap; //TODOJEFFGIFFEN AAAAUGH why god why (always too low)
+
+            //compose data used in info pane (classic dialog fields)
+            m_dataFieldDataMsg = "Data Size: " + m_src.m_scienceData.dataAmount.ToString("F1") + " Mits";
+            m_dataFieldTrnsWarn = m_src.m_trnsWarnEnabled ? "Inoperable after Transmitting." : string.Empty;
+            m_rcvrFieldMsg = "Recovery: +" + m_rcvrValue + " Science";
+            m_rcvrFieldBackBar = 1.0f - subject.science / subject.scienceCap; //shows this experi's value vs max possible
+            m_trnsFieldMsg = "Transmit: +" + m_trnsValue + " Science";
+            //HACKJEFFGIFFEN
+            m_trnsFieldBackBar = (m_src.m_transmitValue + m_src.m_nextTransmitValue) / subject.scienceCap;
+            m_transBtnPerc = (transmitValue >= 0.1f ? m_src.m_scienceData.transmitValue * 100 : 0.0f).ToString("F0") + "%"; //if transmit sci is 0pts, then % is 0
+            m_labBtnData = "+" + m_src.m_scienceData.labValue.ToString("F0");
+        }
+    }
+
     class GUIView
     {
         //UI
@@ -46,9 +108,7 @@ namespace WhichData
 
         //state from ksp
         public GUIStyle m_styleDiscardButton;
-        public GUIStyle m_styleKeepButton;
         public GUIStyle m_styleTransmitButton;
-        public GUIStyle m_styleTooltips;
         public GUIStyle m_styleRfIcons;      //result field
         public GUIStyle m_styleRfText;       //
         public GUIStyle m_styleRfBackground; //
@@ -59,20 +119,18 @@ namespace WhichData
         public GUIStyle m_stylePrgBarLightBlue;
         public GUIStyle m_styleLabButton;
         public GUIStyle m_styleResetButton;
-        public float m_progressBarWidth;
-        public float m_rightSideWidth;
+        public float m_progressBarWidth = 130; //stolen from ExperimentsResultDialog
+        public float m_rightSideWidth = 60;//stolen from ExperimentsResultDialog
         GUISkin m_dlgSkin;
 
         //GUI state
-        public bool m_prevBtDown = false;
-        public bool m_nextBtDown = false;
         public bool m_closeBtn = false;
         public bool m_discardBtn = false;
         public bool m_moveBtn = false;
-        public bool m_moveBtnEnabled = false;
         public bool m_labBtn = false;
-        public bool m_labBtnEnabled = false;
         public bool m_transmitBtn = false;
+        public bool m_moveBtnEnabled = false;
+        public bool m_labBtnEnabled = false;
         public bool m_transmitBtnEnabled = false;
 
         public Vector2 m_scrollPos;
@@ -80,12 +138,6 @@ namespace WhichData
         public Texture2D m_scienceIcon = null;
         public GUIStyle m_closeBtnStyle = new GUIStyle();
         public GUIStyle m_moveBtnStyle = new GUIStyle();
-
-        public string m_titleBar = "haxxzilla";
-        public string m_boxMsg;
-        public Action m_layoutInfoPaneBody; //really just enable disable the oldschool bars at bottom of box
-        public string m_labBtnMsg;
-        public string m_transmitBtnMsg;
 
         //returns empty string on success, error string on failure
         public string Initialize()
@@ -118,7 +170,6 @@ namespace WhichData
             m_dlgSkin = skins.First(skin => skin.name == "ExperimentsDialogSkin");
             //these are the custom styles inside the ExperimentsResultDialog
             m_styleDiscardButton = m_dlgSkin.GetStyle("discard button");
-            m_styleKeepButton = m_dlgSkin.GetStyle("keep button");
             m_styleTransmitButton = m_dlgSkin.GetStyle("transmit button");
             m_styleRfIcons = m_dlgSkin.GetStyle("icons");
             m_styleRfText = m_dlgSkin.GetStyle("iconstext");
@@ -130,11 +181,6 @@ namespace WhichData
             m_stylePrgBarLightBlue = m_dlgSkin.GetStyle("progressBarFill4");
             m_styleLabButton = m_dlgSkin.GetStyle("lab button");
             m_styleResetButton = m_dlgSkin.GetStyle("reset button");
-
-            //HACKJEFFGIFFEN
-            //m_progressBarWidth = ExperimentsResultDialog.Instance.progressBarWidth;
-            //m_rightSideWidth = ExperimentsResultDialog.Instance.rightSideWidth;
-            //m_tooltipOffset = ExperimentsResultDialog.Instance.tooltipOffset;
 
             //find and use the existing textures from the orig dlg
             Texture2D[] textures = Resources.FindObjectsOfTypeAll<Texture2D>();
@@ -157,7 +203,7 @@ namespace WhichData
         }
 
         //HACKJEFFGIFFEN
-        public List<DataPage> m_copyDataPages = new List<DataPage>();
+        public List<ViewPage> m_copyDataPages = new List<ViewPage>();
         public void OnGUI()
         {
             if (m_showUI)
@@ -183,14 +229,14 @@ namespace WhichData
 
             GUILayout.BeginArea(m_infoPaneRect/*, m_dlgSkin.window*/);
             {
-/*                GUILayout.BeginVertical();
+                GUILayout.BeginVertical();
                 {
                     LayoutTitleBar();
 
                     GUILayout.BeginHorizontal();
                     {
                         //Main left column
-                        m_layoutInfoPaneBody();
+                        LayoutBodySingle();
 
                         //Rightside button column
                         LayoutActionButtons();
@@ -201,7 +247,7 @@ namespace WhichData
                 }
                 GUILayout.EndVertical();
 
-*/            }
+            }
             GUILayout.EndArea();
 
             //must be last or it disables all the widgets etc
@@ -231,7 +277,7 @@ namespace WhichData
                 listField.padding = new RectOffset(0, 0, 0, 0); //nerf padding
                 GUIContent nothing = new GUIContent();
                 Color oldColor = GUI.color;
-                foreach (DataPage pg in m_copyDataPages)
+                foreach (ViewPage pg in m_copyDataPages)
                 {
                     GUI.color = pg.m_selected ? Color.yellow : Color.white;
                     pg.m_rowButton = GUILayout.Button(nothing, listField, GUILayout.MaxHeight(m_listFieldMaxHeight));
@@ -248,7 +294,7 @@ namespace WhichData
                         GUI.color = Color.white;
                         GUIStyle cliptext = new GUIStyle(m_styleRfText); //HACKJEFFGIFFEN
                         cliptext.clipping = TextClipping.Clip;
-                        GUI.Label(walker, pg.m_experi, cliptext);
+                        GUI.Label(walker, pg.experiment, cliptext);
                         walker.x += walker.width;
 
                         //recvr
@@ -265,7 +311,7 @@ namespace WhichData
 
                         //data mits
                         GUI.color = Color.white;
-                        GUI.Label(walker, pg.m_scienceData.dataAmount + " Mits", m_styleRfText);
+                        GUI.Label(walker, pg.mits + " Mits", m_styleRfText);
                         walker.x += walker.width;
 
                         //disabling
@@ -273,15 +319,15 @@ namespace WhichData
                         //walker.x += walker.width;
 
                         //biome
-                        GUI.Label(walker, pg.m_biome == string.Empty ? "Global" : pg.m_biome, m_styleRfText);
+                        GUI.Label(walker, pg.biome, m_styleRfText);
                         walker.x += walker.width;
 
                         //situ
-                        GUI.Label(walker, pg.m_situ, m_styleRfText);
+                        GUI.Label(walker, pg.situation, m_styleRfText);
                         walker.x += walker.width;
 
                         //body
-                        GUI.Label(walker, pg.m_body, m_styleRfText);
+                        GUI.Label(walker, pg.body, m_styleRfText);
                         walker.x += walker.width;
 
                     }
@@ -292,12 +338,12 @@ namespace WhichData
             GUILayout.EndScrollView();
         }
 
-//HACKJEFFGIFFEN
- /*       public void LayoutTitleBar()
+        public void LayoutTitleBar()
         {
             GUILayout.BeginHorizontal();
             {
-                GUILayout.Label(m_titleBar);
+                ViewPage page = m_copyDataPages.First();
+                GUILayout.Label(page.title);
                 m_closeBtn = GUILayout.Button("", m_closeBtnStyle);
 
             }
@@ -310,17 +356,15 @@ namespace WhichData
         {
             GUILayout.BeginVertical(GUILayout.Width(m_rightSideWidth));
             {
-                //HACKJEFFGIFFEN tooltips missing: old attempts at the tooltips...why dont you love me WHY
-                //GUI.tooltip = "Discard Data";
-                //GUILayout.Button(new GUIContent("", "Discard Data"), m_styleDiscardButton);
+                ViewPage pg = m_copyDataPages.First(); //HACKJEFFGIFFEN single mode
                 m_discardBtn = GUILayout.Button("", m_styleDiscardButton);
                 Color oldColor = GUI.color;
                 GUI.color = m_moveBtnEnabled ? Color.white : Color.grey; //HACKJEFFGIFFEN crap, need a state
                 m_moveBtn = GUILayout.Button("", m_moveBtnStyle);
                 GUI.color = m_labBtnEnabled ? Color.white : Color.grey; //HACKJEFFGIFFEN crap, need a state
-                m_labBtn = GUILayout.Button(m_labBtnMsg, m_styleLabButton);
+                m_labBtn = GUILayout.Button(pg.m_labBtnData, m_styleLabButton);
                 GUI.color = m_transmitBtnEnabled ? Color.white : Color.grey; //HACKJEFFGIFFEN crap, need a state
-                m_transmitBtn = GUILayout.Button(m_transmitBtnMsg, m_styleTransmitButton);
+                m_transmitBtn = GUILayout.Button(pg.m_transBtnPerc, m_styleTransmitButton);
                 GUI.color = oldColor;
 
             }
@@ -333,12 +377,14 @@ namespace WhichData
             //GUILayout.BeginVertical(GUILayout.Width(m_leftColumnWidth)); //width of left column from orig dialog
             GUILayout.BeginVertical();
             {
+                //HACKJEFFGIFFEN m_selectedPages.First();
+                ViewPage curPg = m_copyDataPages.First();
                 //the skin's box GUIStyle already has the green text and nice top left align
-                GUILayout.Box(m_boxMsg);
+                GUILayout.Box(curPg.m_boxText);
 
-                if (singlehaxxxx)
+                //HACKJEFFGIFFEN
+                //if (singlehaxxxx)
                 {
-                    DataPage curPg = m_selectedPages.First();
                     LayoutInfoField(curPg);
                     LayoutRecoverScienceBarField(curPg);
                     LayoutTransmitScienceBarField(curPg);
@@ -348,7 +394,7 @@ namespace WhichData
             GUILayout.EndVertical();
         }
 
-        public void LayoutInfoField(DataPage page)
+        public void LayoutInfoField(ViewPage page)
         {
             GUILayout.BeginHorizontal(m_styleRfBackground);
             {
@@ -375,13 +421,13 @@ namespace WhichData
             GUILayout.EndHorizontal();
         }
 
-        public void LayoutRecoverScienceBarField(DataPage page)
+        public void LayoutRecoverScienceBarField(ViewPage page)
         {
             //selecting the recover science strings & styles
             LayoutScienceBarField(page.m_rcvrFieldMsg, page.m_rcvrPrcnt, page.m_rcvrFieldBackBar, m_stylePrgBarDarkGreen, m_stylePrgBarLightGreen);
         }
 
-        public void LayoutTransmitScienceBarField(DataPage page)
+        public void LayoutTransmitScienceBarField(ViewPage page)
         {
             //selecting the transmit science strings & styles
             LayoutScienceBarField(page.m_trnsFieldMsg, page.m_trnsPrcnt, page.m_trnsFieldBackBar, m_stylePrgBarDarkBlue, m_stylePrgBarLightBlue);
@@ -420,7 +466,7 @@ namespace WhichData
             }
             GUILayout.EndHorizontal();
         }
-*/
+
         public void Update()
         { }
     }

@@ -1,48 +1,37 @@
-review data spawns my dialog instead
-dialog visually matches
+bugs: listen for active vessel switch
+
+done:
+listen for undock/redock/sep/shear/die, containers, experi, labs and antenna joining or leaving the ship need accounted for
+review is all aboard
 create list of all experiments reviewed
+add move button
+provide 'keep' button function in a close button
+listen for hide ui
+< 0.1 sci transmit = 0% on button
+title and box restored
+lab & trans btn #'s restored
+
+doing:
+part gain / loss updates to data - shitty full rebuild in control, shitty full copy to view
+temporarily running single only to finish links across objects
+control & view datas parred down, view nest constructs off control, handy properties to hide members
+dialog visually matches: so trans + next trans is 1px off.....
+
+todo:
+list selection to view info pane (passback,passfwd)
+alt-click group selection in list
+make original buttons work on selected (passback x2)
+partial button operation: x of n selected can be labbed, etc
 create sort toggles on list entries
 sort list with ranked toggling
-list selection to view info pane
-alt-click group selection in list
-make original buttons work on selected
-provide 'keep' button function in a close button
-partial button operation: x of n selected can be labbed, etc
-add move button
+review data spawns my dialog instead
+reviewed / new data highlights
 move btn gains 2nd step: UI hide + destination mouse pick
-
-
-fixed dupe copy doubling...but no note of skip
-find all IScienceDataContainers as PartModules and listing science works nicely
-experi deploy, crew board/eva/transfer, part die, stage activate/sep, dock/undock, partjoint break
-
-PARADIGM SHIFT
-ok.  up till now we're based around the ExperiResultDW and its horribleness.  This was due to needing its callbacks to perform KSP functions.
-But...you think you've found all the callback calls.
-	keep, as we have know from the begnning...does jack shit.
-	ModuleScienceContainer::DumpData(ScienceData data);									//discard
-	ModuleScienceExperiment::ResetExperiment();											//reset
-	ModuleScienceLab::ProcessData(ScienceData item, Callback<ScienceData> onComplete);	//lab clone
-	ModuleDataTransmitter::TransmitData(List<ScienceData> dataQueue, Callback callback)	//transmit
-So.  Can we actually skip the ExperiResultDW altogether?
-
-
-in pursuit of presenting an 'all data onboard' view of the dialog
-load will do full ship scan, track experi, containers, and all onboard data, as well as antenna and lab presence
-then we listen..
-listen for undock/redock/sep/shear/die, containers, experi, labs and antenna joining or leaving the ship need accounted for
 listen for crew board/eva do alter the scientist clean right click menu
 listen for deployed/reviewdata to catch more science inserting to the dialog
-how to listen for take data on eva?
-
 more sorts: lab copy, container, 
 failsafes: moves of dupes to pods and lab copies already done should STAY
-review is all aboard, selects reviewed
-new data highlights
-part gain / loss updates to data
 gather right-click for pod, when any exp has data in it
 clean right-click for pod, when any exp is spent & scientist is aboard
 eva get/StoreData trigger dialog
-listen for active vessel switch
-listen for hide ui
 save selected state & position to ship file

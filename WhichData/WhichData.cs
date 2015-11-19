@@ -16,34 +16,20 @@ namespace WhichData
         public ScienceSubject m_subject;
         public IScienceDataContainer m_dataModule;
 
+        public float m_fullValue;
+        public float m_nextFullValue;
+        public float m_transmitValue;
+        public float m_nextTransmitValue;
+        public bool m_trnsWarnEnabled;
+        public bool m_labAble;
+
         //subjectID parsed
         public string m_experi;
         public string m_body;
         public string m_situ;
         public string m_biome;
 
-        //hud state
-        public int m_index = 0; //into m_dataPages
-        public bool m_selected = false;
-        public bool m_rowButton = false;
-
-        //hud display (truncated values, formatted strings etc)
-        public string m_dataFieldDataMsg;
-        public string m_dataFieldTrnsWarn;
-        public string m_rcvrValue; //1 decimal accuracy
-        public float m_rcvrPrcnt;
-        public string m_rcvrFieldMsg;
-        public float m_rcvrFieldBackBar;
-        public string m_trnsValue; //1 decimal accuracy
-        public float m_trnsPrcnt;
-        public string m_trnsFieldMsg;
-        public float m_trnsFieldBackBar;
-        public string m_transBtnPerc; //0% when sci is 0 pts, and integer % otherwise
-        public string m_labBtnData;
-
-        //hacks 1
-        public float m_sciHack = 2.0f;
-                public DataPage(ScienceData sciData, IScienceDataContainer hostPart )
+        public DataPage(ScienceData sciData, IScienceDataContainer hostPart )
         {
             m_scienceData = sciData;
             m_subject = ResearchAndDevelopment.GetSubjectByID(m_scienceData.subjectID);
@@ -52,28 +38,12 @@ namespace WhichData
 
             //compose data used in row display
             //displayed science in KSP is always 2x the values used in bgr
-            float fullValue = ResearchAndDevelopment.GetScienceValue(m_scienceData.dataAmount, m_subject, 1.0f);
-            m_rcvrValue = (fullValue * m_sciHack).ToString("F1");
-            m_rcvrPrcnt = fullValue / m_subject.scienceCap;
-            float transmitValue = ResearchAndDevelopment.GetScienceValue(m_scienceData.dataAmount, m_subject, m_scienceData.transmitValue);
-            m_trnsValue = (transmitValue * m_sciHack).ToString("F1");
-            m_trnsPrcnt = transmitValue / m_subject.scienceCap;
-            /*m_rcvrPrcnt = m_kspPage.scienceValue * m_sciHack / m_subject.scienceCap; //shows this experi's value vs max possible
-            m_trnsPrcnt = m_kspPage.transmitValue * m_sciHack / m_subject.scienceCap; //TODOJEFFGIFFEN AAAAUGH why god why (always too low)
-            m_rcvrValue = m_kspPage.scienceValue.ToString("F1");
-            m_trnsValue = m_kspPage.transmitValue.ToString("F1");
-            */
-            //compose data used in info pane (classic dialog fields)
-            m_dataFieldDataMsg = "Data Size: " + m_scienceData.dataAmount.ToString("F1") + " Mits";
-            //HACKJEFFGIFFEN
-            m_dataFieldTrnsWarn = /*m_kspPage.showTransmitWarning ? "Inoperable after Transmitting." :*/ string.Empty;
-            m_rcvrFieldMsg = "Recovery: +" + m_rcvrValue + " Science";
-            //TODOJEFFGIFFEN whaaaaat
-            m_rcvrFieldBackBar = 1.0f - m_subject.science / m_subject.scienceCap; //shows this experi's value when done next time vs max possible
-            m_trnsFieldMsg = "Transmit: +" + m_trnsValue + " Science";
-            m_trnsFieldBackBar = m_rcvrFieldBackBar * m_scienceData.transmitValue;
-            m_transBtnPerc = (m_trnsPrcnt >= 0.1f ? m_scienceData.transmitValue * 100 : 0.0f).ToString("F0") + "%"; //if transmit sci is 0pts, then % is 0
-            m_labBtnData = "+" + m_scienceData.labValue.ToString("F0");
+            m_fullValue = ResearchAndDevelopment.GetScienceValue(m_scienceData.dataAmount, m_subject, 1.0f);
+            m_nextFullValue = ResearchAndDevelopment.GetNextScienceValue(m_scienceData.dataAmount, m_subject, 1.0f);
+            m_transmitValue = ResearchAndDevelopment.GetScienceValue(m_scienceData.dataAmount, m_subject, m_scienceData.transmitValue);
+            m_nextTransmitValue = ResearchAndDevelopment.GetNextScienceValue(m_scienceData.dataAmount, m_subject, m_scienceData.transmitValue);
+            m_trnsWarnEnabled = (m_dataModule is ModuleScienceExperiment) && !((ModuleScienceExperiment)m_dataModule).IsRerunnable();
+            m_labAble = ModuleScienceLab.IsLabData(FlightGlobals.ActiveVessel, m_scienceData);
 
             //parse out subjectIDs of the form (we ditch the @):
             //  crewReport@KerbinSrfLandedLaunchPad
@@ -334,9 +304,11 @@ namespace WhichData
                 }
 
                 //HACKJEFFGIFFEN stupid pass
-                m_GUIView.m_copyDataPages = m_dataPages;
+                m_GUIView.m_copyDataPages.Clear();
+                m_dataPages.ForEach(page => m_GUIView.m_copyDataPages.Add(new ViewPage(page)));
 
                 m_dirtyPages = true; //new pages means we need to resort
+
             }
 
             //HACKJEFFGIFFEN old below
