@@ -27,7 +27,6 @@ namespace WhichData
         
         public void OnAwake()
         {
-            Debug.Log("GA ShipModel::OnAwake");
             //register for events
             GameEvents.onPartCouple.Add(OnShipEvent);       //dock
             GameEvents.onPartJointBreak.Add(OnShipEvent);   //undock, shear part off, decouple, destroy (phys parts)

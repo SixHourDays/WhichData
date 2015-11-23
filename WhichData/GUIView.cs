@@ -23,7 +23,7 @@ namespace WhichData
         public string situation => m_src.m_situ;
         public string biome => m_src.m_biome == string.Empty ? "Global" : m_src.m_biome;
         public float mits => m_src.m_scienceData.dataAmount;
-        public string m_boxText;
+        public string m_resultText;
         public string m_dataFieldDataMsg;
         public string m_dataFieldTrnsWarn;
         public string m_rcvrValue; //1 decimal accuracy
@@ -43,9 +43,9 @@ namespace WhichData
         {
             m_src = src;
             ScienceSubject subject = m_src.m_subject;
-            ScienceData data = m_src.m_scienceData;
+            ScienceData scidata = m_src.m_scienceData;
 
-            m_boxText = ResearchAndDevelopment.GetResults(subject.id);
+            m_resultText = ResearchAndDevelopment.GetResults(subject.id);
             //compose data used in row display
             //displayed science in KSP is always 2x the values used in bgr
             m_rcvrValue = (m_src.m_fullValue * m_sciHack).ToString("F1");
@@ -56,15 +56,15 @@ namespace WhichData
             m_trnsPrcnt = m_src.m_transmitValue / subject.scienceCap; //TODOJEFFGIFFEN AAAAUGH why god why (always too low)
 
             //compose data used in info pane (classic dialog fields)
-            m_dataFieldDataMsg = "Data Size: " + m_src.m_scienceData.dataAmount.ToString("F1") + " Mits";
+            m_dataFieldDataMsg = "Data Size: " + scidata.dataAmount.ToString("F1") + " Mits";
             m_dataFieldTrnsWarn = m_src.m_trnsWarnEnabled ? "Inoperable after Transmitting." : string.Empty;
             m_rcvrFieldMsg = "Recovery: +" + m_rcvrValue + " Science";
             m_rcvrFieldBackBar = 1.0f - subject.science / subject.scienceCap; //shows this experi's value vs max possible
             m_trnsFieldMsg = "Transmit: +" + m_trnsValue + " Science";
             //HACKJEFFGIFFEN
             m_trnsFieldBackBar = (m_src.m_transmitValue + m_src.m_nextTransmitValue) / subject.scienceCap;
-            m_transBtnPerc = (transmitValue >= 0.1f ? m_src.m_scienceData.transmitValue * 100 : 0.0f).ToString("F0") + "%"; //if transmit sci is 0pts, then % is 0
-            m_labBtnData = "+" + m_src.m_scienceData.labValue.ToString("F0");
+            m_transBtnPerc = (transmitValue >= 0.1f ? scidata.transmitValue * 100 : 0.0f).ToString("F0") + "%"; //if transmit sci is 0pts, then % is 0
+            m_labBtnData = "+" + m_src.m_labPts.ToString("F0");
         }
     }
 
@@ -79,7 +79,6 @@ namespace WhichData
 
         public void OnAwake()
         {
-            Debug.Log("GA GUIView::OnAwake");
             GameEvents.onHideUI.Add(HideUI);
             GameEvents.onShowUI.Add(ShowUI);
         }
@@ -90,60 +89,37 @@ namespace WhichData
             GameEvents.onShowUI.Remove(ShowUI);
         }
 
-        //hacks
-        public float m_barMinPx = 7.0f;
-
         //window pixel positions etc
         //default window in 1920x1080 is at 243, 190, 413x240 (10px of grey round thinger at left)
         //500px of list pane, 413 of info pane ( -10 left grey thing -9 fat left pad of info. y+60 for 'all' button height //HACKJEFFGIFFEN
         public Rect m_window = new Rect(243, 190, 500 + 394, 240 + 64);
         public Rect m_listPaneRect = new Rect(6, 6, 500 - 6 * 2, 240 + 64 - 6 * 2); //y origin is m_padding really
-        //6px border all around.  Then 14px of window title, 6px again below it to sync to orig window top.
-        public Rect m_infoPaneRect = new Rect(500 + 3, 6, 391 - 3, 240 + 64 - 6 * 2); //note, top/bottom pad, 3 combined w list's 6 = 9 left pad.  no right pad (made of dropshadow).
-        public int m_padding = 6;
-        public int m_leftColumnWidth = 325;
-        public int m_barToEndPad = 2;
-        public Color m_inopWarnOrange = new Color(1.0f, 0.63f, 0.0f); //orangey gold
         public int m_listFieldMaxHeight = 22;  //height of each list row. min be 18, helps with click probability some
 
         //state from ksp
-        public GUIStyle m_styleDiscardButton;
-        public GUIStyle m_styleTransmitButton;
-        public GUIStyle m_styleRfIcons;      //result field
         public GUIStyle m_styleRfText;       //
-        public GUIStyle m_styleRfBackground; //
-        public GUIStyle m_stylePrgBarBG;
-        public GUIStyle m_stylePrgBarDarkGreen;
-        public GUIStyle m_stylePrgBarLightGreen;
-        public GUIStyle m_stylePrgBarDarkBlue;
-        public GUIStyle m_stylePrgBarLightBlue;
-        public GUIStyle m_styleLabButton;
-        public GUIStyle m_styleResetButton;
-        public float m_progressBarWidth = 130; //stolen from ExperimentsResultDialog
-        public float m_rightSideWidth = 60;//stolen from ExperimentsResultDialog
         GUISkin m_dlgSkin;
 
         //GUI state
-        public bool m_closeBtn = false;
-        public bool m_discardBtn = false;
-        public bool m_moveBtn = false;
-        public bool m_labBtn = false;
-        public bool m_transmitBtn = false;
+        //HACKJEFFGIFFEN make the InfoPane's directly use w parent member?
         public bool m_moveBtnEnabled = false;
         public bool m_labBtnEnabled = false;
         public bool m_transmitBtnEnabled = false;
-
         public Vector2 m_scrollPos;
-        public Texture2D m_dataIcon = null;
-        public Texture2D m_scienceIcon = null;
-        public GUIStyle m_closeBtnStyle = new GUIStyle();
-        public GUIStyle m_moveBtnStyle = new GUIStyle();
+
+        //HACKJEFFGIFFEN just this for now
+        ViewPageInfoPane m_infoPane = new ViewPageInfoPane();
 
         //returns empty string on success, error string on failure
         public string Initialize()
         {
             Debug.Log("GA GUIView::Initialize");
-            string errorMsg = string.Empty;
+            string errorMsg = m_infoPane.Initialize();
+            if ( errorMsg != string.Empty)
+            {
+                //HACKJEFFGIFFEN
+                return errorMsg;
+            }
 
             //TODOJEFFGIFFEN start validating the loads against bad data, return appropriate errors
             GUISkin[] skins = Resources.FindObjectsOfTypeAll<GUISkin>();
@@ -169,44 +145,17 @@ namespace WhichData
             //find ExperimentsResultDialog.guiSkin
             m_dlgSkin = skins.First(skin => skin.name == "ExperimentsDialogSkin");
             //these are the custom styles inside the ExperimentsResultDialog
-            m_styleDiscardButton = m_dlgSkin.GetStyle("discard button");
-            m_styleTransmitButton = m_dlgSkin.GetStyle("transmit button");
-            m_styleRfIcons = m_dlgSkin.GetStyle("icons");
             m_styleRfText = m_dlgSkin.GetStyle("iconstext");
-            m_styleRfBackground = m_dlgSkin.GetStyle("resultfield");
-            m_stylePrgBarBG = m_dlgSkin.GetStyle("progressBarBG");
-            m_stylePrgBarDarkGreen = m_dlgSkin.GetStyle("progressBarFill");
-            m_stylePrgBarLightGreen = m_dlgSkin.GetStyle("progressBarFill2");
-            m_stylePrgBarDarkBlue = m_dlgSkin.GetStyle("progressBarFill3");
-            m_stylePrgBarLightBlue = m_dlgSkin.GetStyle("progressBarFill4");
-            m_styleLabButton = m_dlgSkin.GetStyle("lab button");
-            m_styleResetButton = m_dlgSkin.GetStyle("reset button");
-
-            //find and use the existing textures from the orig dlg
-            Texture2D[] textures = Resources.FindObjectsOfTypeAll<Texture2D>();
-            m_dataIcon = textures.First<Texture2D>(t => t.name == "resultsdialog_datasize");
-            m_scienceIcon = textures.First<Texture2D>(t => t.name == "resultsdialog_scivalue");
-
-            m_closeBtnStyle.margin = new RectOffset(6, 6, 0, 0); //top pad from window, bottom irrelevant
-            m_closeBtnStyle.fixedWidth = m_closeBtnStyle.fixedHeight = 25.0f;
-            m_closeBtnStyle.normal.background = GameDatabase.Instance.GetTexture("SixHourDays/closebtnnormal", false);
-            m_closeBtnStyle.hover.background = GameDatabase.Instance.GetTexture("SixHourDays/closebtnhover", false);
-            m_closeBtnStyle.active.background = GameDatabase.Instance.GetTexture("SixHourDays/closebtndown", false);
-
-            m_moveBtnStyle.margin = new RectOffset(7, 1, 2, 2);
-            m_moveBtnStyle.fixedWidth = m_moveBtnStyle.fixedHeight = 55.0f;
-            m_moveBtnStyle.normal.background = GameDatabase.Instance.GetTexture("SixHourDays/movebtnnormal", false);
-            m_moveBtnStyle.hover.background = GameDatabase.Instance.GetTexture("SixHourDays/movebtnhover", false);
-            m_moveBtnStyle.active.background = GameDatabase.Instance.GetTexture("SixHourDays/movebtndown", false);
 
             return errorMsg;
         }
 
         //HACKJEFFGIFFEN
-        public List<ViewPage> m_copyDataPages = new List<ViewPage>();
+        public List<ViewPage> m_viewPages = new List<ViewPage>();
+        public List<ViewPage> m_selectedPages = new List<ViewPage>();
         public void OnGUI()
         {
-            if (m_showUI)
+            if (m_showUI && m_viewPages.Count > 0)
             {
                 int uid = GUIUtility.GetControlID(FocusType.Passive); //get a nice unique window id from system
                 GUI.skin = m_dlgSkin;
@@ -216,9 +165,6 @@ namespace WhichData
 
         void WindowLayout(int windowID)
         {
-            //  TODOJEFFGIFFEN
-            //  make transmit light blue just be 5 px back off dark blue
-
             GUILayout.BeginArea(m_listPaneRect/*, HighLogic.Skin.window*/);
             {
 //                LayoutListToggles();
@@ -227,28 +173,7 @@ namespace WhichData
             }
             GUILayout.EndArea();
 
-            GUILayout.BeginArea(m_infoPaneRect/*, m_dlgSkin.window*/);
-            {
-                GUILayout.BeginVertical();
-                {
-                    LayoutTitleBar();
-
-                    GUILayout.BeginHorizontal();
-                    {
-                        //Main left column
-                        LayoutBodySingle();
-
-                        //Rightside button column
-                        LayoutActionButtons();
-
-                    }
-                    GUILayout.EndHorizontal();
-
-                }
-                GUILayout.EndVertical();
-
-            }
-            GUILayout.EndArea();
+            m_infoPane.WindowLayout();
 
             //must be last or it disables all the widgets etc
             GUI.DragWindow();
@@ -277,7 +202,7 @@ namespace WhichData
                 listField.padding = new RectOffset(0, 0, 0, 0); //nerf padding
                 GUIContent nothing = new GUIContent();
                 Color oldColor = GUI.color;
-                foreach (ViewPage pg in m_copyDataPages)
+                foreach (ViewPage pg in m_viewPages)
                 {
                     GUI.color = pg.m_selected ? Color.yellow : Color.white;
                     pg.m_rowButton = GUILayout.Button(nothing, listField, GUILayout.MaxHeight(m_listFieldMaxHeight));
@@ -338,60 +263,258 @@ namespace WhichData
             GUILayout.EndScrollView();
         }
 
+        public void Update()
+        {
+            if (m_showUI && m_viewPages.Count > 0)
+            {
+                //list click handling
+
+                //when there is no selection, default
+                if (m_selectedPages.Count == 0)
+                {
+                    m_viewPages.First().m_rowButton = true; //fake a click
+//HACKJEFFGIFFEN                    m_dirtySelection = true;
+                }
+
+                //find first page with its row button clicked (or none, giving null)
+                ViewPage selectedPage = m_viewPages.Find(page => page.m_rowButton); //my first lambda EVER!  hooray
+
+                if (selectedPage != null)
+                {
+                    //unhighlight all the old
+                    m_selectedPages.ForEach(page => page.m_selected = false);
+
+                    //now discern whether click or altclick (note altclick requires prev regular click)
+/*HACKJEFFGIFFEN                    if (Input.GetKey(KeyCode.LeftAlt) || Input.GetKey(KeyCode.RightAlt))
+                    {
+                        int a = m_selectedPages.First().m_index; //smallest selected index 
+                        int b = m_selectedPages.Last().m_index; //largest
+                        int c = selectedPage.m_index; //brand new index chosen
+                        int start = Math.Min(Math.Min(a, b), c);
+                        int end = Math.Max(Math.Max(a, b), c);
+                        m_selectedPages = m_dataPages.GetRange(start, end - start + 1); // inclusive range
+                    }
+                    else
+  */                  {
+                        m_selectedPages.Clear();
+                        m_selectedPages.Add(selectedPage);
+                    }
+
+                    //highlight all the new
+                    m_selectedPages.ForEach(page => page.m_selected = true);
+
+                    //HACKJEFFGIFFEN push the select to the infopane
+                    Debug.Log("GA m_infoPane.page set");
+                    m_infoPane.page = m_selectedPages.First();
+//HACKJEFFGIFFEN                    m_dirtySelection = true;
+                }
+            }
+        }
+    }
+
+    public class BaseInfoPane
+    {
+        //ksp state
+        public GUIStyle m_styleDiscardButton;
+        public GUIStyle m_styleTransmitButton;
+        public GUIStyle m_styleLabButton;
+        public GUIStyle m_styleResetButton;
+        //handmade styles
+        public GUIStyle m_closeBtnStyle = new GUIStyle();
+        public GUIStyle m_moveBtnStyle = new GUIStyle();
+
+        public virtual string Initialize()
+        {
+            string errorMsg = string.Empty;
+
+            //TODOJEFFGIFFEN start validating the loads against bad data, return appropriate errors
+
+            GUISkin[] skins = Resources.FindObjectsOfTypeAll<GUISkin>();
+            //find ExperimentsResultDialog.guiSkin
+            GUISkin dlgSkin = skins.First(skin => skin.name == "ExperimentsDialogSkin");
+            //these are the custom styles inside the ExperimentsResultDialog
+            m_styleDiscardButton = dlgSkin.GetStyle("discard button");
+            m_styleTransmitButton = dlgSkin.GetStyle("transmit button");
+            m_styleLabButton = dlgSkin.GetStyle("lab button");
+            m_styleResetButton = dlgSkin.GetStyle("reset button");
+            
+            //our on disk assets
+            m_closeBtnStyle.margin = new RectOffset(6, 6, 0, 0); //top pad from window, bottom irrelevant
+            m_closeBtnStyle.fixedWidth = m_closeBtnStyle.fixedHeight = 25.0f;
+            m_closeBtnStyle.normal.background = GameDatabase.Instance.GetTexture("SixHourDays/closebtnnormal", false);
+            m_closeBtnStyle.hover.background = GameDatabase.Instance.GetTexture("SixHourDays/closebtnhover", false);
+            m_closeBtnStyle.active.background = GameDatabase.Instance.GetTexture("SixHourDays/closebtndown", false);
+            m_moveBtnStyle.margin = new RectOffset(7, 1, 2, 2);
+            m_moveBtnStyle.fixedWidth = m_moveBtnStyle.fixedHeight = 55.0f;
+            m_moveBtnStyle.normal.background = GameDatabase.Instance.GetTexture("SixHourDays/movebtnnormal", false);
+            m_moveBtnStyle.hover.background = GameDatabase.Instance.GetTexture("SixHourDays/movebtnhover", false);
+            m_moveBtnStyle.active.background = GameDatabase.Instance.GetTexture("SixHourDays/movebtndown", false);
+
+            return errorMsg;
+        }
+
+        //in //HACKJEFFGIFFEN this is a LOT of access.  state pack?
+        public string title { get; set; }
+        public string resultText { get; set; }
+        public bool moveBtnEnabled { get; set; }
+        public bool labBtnEnabled { get; set; }
+        public string labBtnData { get; set; }
+        public bool transmitBtnEnabled { get; set; }
+        public string transBtnPerc { get; set; }//0% when sci is 0 pts, and integer % otherwise
+        //out
+        public bool closeBtn { get; set; }
+        public bool discardBtn { get; set; }
+        public bool moveBtn { get; set; }
+        public bool labBtn { get; set; }
+        public bool transmitBtn { get; set; }
+
+        //6px border all around.  Then 14px of window title, 6px again below it to sync to orig window top.
+        public Rect m_infoPaneRect = new Rect(500 + 3, 6, 391 - 3, 240 + 64 - 6 * 2); //note, top/bottom pad, 3 combined w list's 6 = 9 left pad.  no right pad (made of dropshadow).
+        public int m_padding = 6;
+        public int m_barToEndPad = 2;
+        public Color m_inopWarnOrange = new Color(1.0f, 0.63f, 0.0f); //orangey gold
+        public float m_rightSideWidth = 60;//stolen from ExperimentsResultDialog
+
+        public void WindowLayout()
+        {
+            GUILayout.BeginArea(m_infoPaneRect);
+            {
+                GUILayout.BeginVertical();
+                {
+                    LayoutTitleBar();
+
+                    GUILayout.BeginHorizontal();
+                    {
+                        //Main left column
+                        GUILayout.BeginVertical();
+                        {
+                            //the skin's box GUIStyle already has the green text and nice top left align
+                            GUILayout.Box(resultText);
+
+                            LayoutBody();
+                        }
+                        GUILayout.EndVertical();
+
+                        //Rightside button column
+                        LayoutActionButtons();
+
+                    }
+                    GUILayout.EndHorizontal();
+
+                }
+                GUILayout.EndVertical();
+
+            }
+            GUILayout.EndArea();
+        }
+
         public void LayoutTitleBar()
         {
             GUILayout.BeginHorizontal();
             {
-                ViewPage page = m_copyDataPages.First();
-                GUILayout.Label(page.title);
-                m_closeBtn = GUILayout.Button("", m_closeBtnStyle);
-
+                GUILayout.Label(title);
+                closeBtn = GUILayout.Button("", m_closeBtnStyle);
             }
             GUILayout.EndHorizontal();
 
             GUILayout.Space(4); //HACKJEFFGIFFEN to align with the list pane's top
         }
 
+        //the vertical layout + box became common
+        public virtual void LayoutBody()
+        {}
+
         public void LayoutActionButtons()
         {
             GUILayout.BeginVertical(GUILayout.Width(m_rightSideWidth));
             {
-                ViewPage pg = m_copyDataPages.First(); //HACKJEFFGIFFEN single mode
-                m_discardBtn = GUILayout.Button("", m_styleDiscardButton);
+                discardBtn = GUILayout.Button("", m_styleDiscardButton);
                 Color oldColor = GUI.color;
-                GUI.color = m_moveBtnEnabled ? Color.white : Color.grey; //HACKJEFFGIFFEN crap, need a state
-                m_moveBtn = GUILayout.Button("", m_moveBtnStyle);
-                GUI.color = m_labBtnEnabled ? Color.white : Color.grey; //HACKJEFFGIFFEN crap, need a state
-                m_labBtn = GUILayout.Button(pg.m_labBtnData, m_styleLabButton);
-                GUI.color = m_transmitBtnEnabled ? Color.white : Color.grey; //HACKJEFFGIFFEN crap, need a state
-                m_transmitBtn = GUILayout.Button(pg.m_transBtnPerc, m_styleTransmitButton);
+                GUI.color = moveBtnEnabled ? Color.white : Color.grey; //HACKJEFFGIFFEN crap, need a state
+                moveBtn = GUILayout.Button("", m_moveBtnStyle);
+                GUI.color = labBtnEnabled ? Color.white : Color.grey; //HACKJEFFGIFFEN crap, need a state
+                labBtn = GUILayout.Button(labBtnData, m_styleLabButton);
+                GUI.color = transmitBtnEnabled ? Color.white : Color.grey; //HACKJEFFGIFFEN crap, need a state
+                transmitBtn = GUILayout.Button(transBtnPerc, m_styleTransmitButton);
                 GUI.color = oldColor;
 
             }
             GUILayout.EndVertical();
         }
+    }
 
-        //TODOJEFFGIFFEN encapsulate further into a pane display?
-        public void LayoutBodySingle()
+    public class ViewPageInfoPane : BaseInfoPane
+    {
+        //state from ksp
+        public GUIStyle m_styleRfIcons;      //result field
+        public GUIStyle m_styleRfText;       //
+        public GUIStyle m_styleRfBackground; //
+        public GUIStyle m_stylePrgBarBG;
+        public GUIStyle m_stylePrgBarDarkGreen;
+        public GUIStyle m_stylePrgBarLightGreen;
+        public GUIStyle m_stylePrgBarDarkBlue;
+        public GUIStyle m_stylePrgBarLightBlue;
+
+        public Texture2D m_dataIcon = null;
+        public Texture2D m_scienceIcon = null;
+
+        public override string Initialize()
         {
-            //GUILayout.BeginVertical(GUILayout.Width(m_leftColumnWidth)); //width of left column from orig dialog
-            GUILayout.BeginVertical();
+            string errorMsg = base.Initialize();
+            if ( errorMsg != string.Empty )
             {
-                //HACKJEFFGIFFEN m_selectedPages.First();
-                ViewPage curPg = m_copyDataPages.First();
-                //the skin's box GUIStyle already has the green text and nice top left align
-                GUILayout.Box(curPg.m_boxText);
-
-                //HACKJEFFGIFFEN
-                //if (singlehaxxxx)
-                {
-                    LayoutInfoField(curPg);
-                    LayoutRecoverScienceBarField(curPg);
-                    LayoutTransmitScienceBarField(curPg);
-                }
-
+                //HACKJEFFGIFFEN cleanup
+                return errorMsg;
             }
-            GUILayout.EndVertical();
+
+            //TODOJEFFGIFFEN start validating the loads against bad data, return appropriate errors
+
+            GUISkin[] skins = Resources.FindObjectsOfTypeAll<GUISkin>();
+            //find ExperimentsResultDialog.guiSkin
+            GUISkin dlgSkin = skins.First(skin => skin.name == "ExperimentsDialogSkin");
+            //these are the custom styles inside the ExperimentsResultDialog
+            m_styleRfIcons = dlgSkin.GetStyle("icons");
+            m_styleRfText = dlgSkin.GetStyle("iconstext");
+            m_styleRfBackground = dlgSkin.GetStyle("resultfield");
+            m_stylePrgBarBG = dlgSkin.GetStyle("progressBarBG");
+            m_stylePrgBarDarkGreen = dlgSkin.GetStyle("progressBarFill");
+            m_stylePrgBarLightGreen = dlgSkin.GetStyle("progressBarFill2");
+            m_stylePrgBarDarkBlue = dlgSkin.GetStyle("progressBarFill3");
+            m_stylePrgBarLightBlue = dlgSkin.GetStyle("progressBarFill4");
+
+            //find and use the existing textures from the orig dlg
+            Texture2D[] textures = Resources.FindObjectsOfTypeAll<Texture2D>();
+            m_dataIcon = textures.First<Texture2D>(t => t.name == "resultsdialog_datasize");
+            m_scienceIcon = textures.First<Texture2D>(t => t.name == "resultsdialog_scivalue");
+
+            return errorMsg;
+
+        }
+        //HACKJEFFGIFFEN maybe hack maybe not
+        public float m_progressBarWidth = 130; //stolen from ExperimentsResultDialog
+        public int m_leftColumnWidth = 325;
+        public float m_barMinPx = 7.0f;
+
+        //page we'll be displaying
+        private ViewPage m_page;
+        public ViewPage page
+        {
+            get { return m_page; }
+            set
+            {
+                m_page = value;
+                title = m_page.title;             //set base members
+                resultText = m_page.m_resultText;
+                labBtnData = m_page.m_labBtnData;
+                transBtnPerc = m_page.m_transBtnPerc;
+             }
+        }
+
+        public override void LayoutBody()
+        {
+            LayoutInfoField(page);
+            LayoutRecoverScienceBarField(page);
+            LayoutTransmitScienceBarField(page);
         }
 
         public void LayoutInfoField(ViewPage page)
@@ -416,7 +539,6 @@ namespace WhichData
                     m_styleRfText.alignment = oldAnchor;
 
                 }
-
             }
             GUILayout.EndHorizontal();
         }
@@ -444,7 +566,7 @@ namespace WhichData
                 GUILayout.Label(text, m_styleRfText);
                 Rect textRect = GUILayoutUtility.GetLastRect();
 
-                //HACKJEFFGIFFEN 
+                //HACKJEFFGIFFEN this is a goddamn atrocity
                 //Rect totalBar = new Rect(391 - m_rightSideWidth - m_progressBarWidth - 11 - m_barToEndPad, textRect.yMin, m_progressBarWidth, textRect.height);
                 Rect totalBar = new Rect(391 - m_rightSideWidth - m_progressBarWidth - 11, textRect.yMin, m_progressBarWidth, textRect.height);
                 GUI.Box(totalBar, nothing, m_stylePrgBarBG);
@@ -466,8 +588,5 @@ namespace WhichData
             }
             GUILayout.EndHorizontal();
         }
-
-        public void Update()
-        { }
     }
 }
