@@ -17,18 +17,20 @@ GUIView registers single/group selections
 BaseInfoPane can now sum & display a group of ViewPages
 control, not GUIView, now determines proper action button locking based on selection & model state
 GUIView self-switches between BaseInfoPane and ViewPageInfoPane depending on selection
+list selection to view info pane (passback,passfwd)
+alt-click group selection in list
 
 doing:
+update group text for when move / lab / radio is disabled
 evolving sequence is: model->control->view, view input->control, control->model & view
-should decompose InfoPaneData, never used for pass along
 control should track actual selectees
 preservation of selectees across model changes.
 part gain / loss updates to data - shitty full rebuild in control, shitty full copy to view
 dialog visually matches: so trans + next trans is 1px off.....
 
 todo:
-list selection to view info pane (passback,passfwd)
-alt-click group selection in list
+listen for deployed to catch more science inserting to the dialog
+listen for reset to clear a data
 make original buttons work on selected (passback x2)
 partial button operation: x of n selected can be labbed, etc
 create sort toggles on list entries
@@ -37,7 +39,6 @@ review data spawns my dialog instead
 reviewed / new data highlights
 move btn gains 2nd step: UI hide + destination mouse pick
 listen for crew board/eva do alter the scientist clean right click menu
-listen for deployed/reviewdata to catch more science inserting to the dialog
 more sorts: lab copy, container, 
 failsafes: moves of dupes to pods and lab copies already done should STAY
 gather right-click for pod, when any exp has data in it

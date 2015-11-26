@@ -218,13 +218,6 @@ namespace WhichData
             }
         }
 
-        //TODOJEFFGIFFEN pass on:
-        //  what toggles gui needs & states
-        //  list elements, and selectees
-        //  info button locks
-        //  mode of info pane single/group
-        //  appropriate box info, and bar info
-        
         //TODOJEFFGIFFEN pass back:
         //  toggle pushes on unlocked
         //  list picks
@@ -272,18 +265,15 @@ namespace WhichData
         State m_state = State.Daemon;
         ScreenMessage m_scrnMsg = null;
 
-        //HACKJEFFGIFFEN
-        int waitCount = 0;
         public void Update()
         {
             if (!ready)
             {
                 while (ResearchAndDevelopment.Instance == null)
                 {
-                    ++waitCount;
                     return;
                 }
-                Debug.Log("GA Update blocked on R&D for " + waitCount + " frames");
+                Debug.Log("GA unblocked by R&D, first Update");
 
                 ready = true;
             }

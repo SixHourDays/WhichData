@@ -102,11 +102,13 @@ namespace WhichData
         GUISkin m_dlgSkin;
 
         //GUI state
-        //HACKJEFFGIFFEN make the InfoPane's directly use w parent member?
+        //out state of buttons
+        public bool closeBtn => m_infoPane.closeBtn;
+        public bool discardBtn => m_infoPane.discardBtn;
+        public bool moveBtn => m_infoPane.moveBtn;
+        public bool labBtn => m_infoPane.labBtn;
+        public bool transmitBtn => m_infoPane.transmitBtn;
 
-        public bool m_moveBtnEnabled = false;
-        public bool m_labBtnEnabled = false;
-        public bool m_transBtnEnabled = false;
         public Vector2 m_scrollPos;
 
 
@@ -377,8 +379,6 @@ namespace WhichData
         {
             string errorMsg = string.Empty;
 
-            m_data = new InfoPaneData();
-
             //TODOJEFFGIFFEN start validating the loads against bad data, return appropriate errors
 
             GUISkin[] skins = Resources.FindObjectsOfTypeAll<GUISkin>();
@@ -412,37 +412,14 @@ namespace WhichData
         public bool labBtn { get; set; }
         public bool transmitBtn { get; set; }
 
-        //TODOJEFFGIFFEN dissassemble into base
-        public class InfoPaneData
-        {
-            public string title { get; set; }
-            public string resultText { get; set; }
-            public string labBtnData { get; set; }
-            public string transBtnPerc { get; set; }//0% when sci is 0 pts, and integer % otherwise
+        protected string m_title;
+        protected string m_resultText;
+        protected string m_labBtnData;
+        protected string m_transBtnPerc;//0% when sci is 0 pts, and integer % otherwise
+        protected bool m_moveBtnEnabled;
+        protected bool m_labBtnEnabled;
+        protected bool m_transBtnEnabled;
 
-            public bool moveBtnEnabled { get; set; }
-            public bool labBtnEnabled { get; set; }
-            public bool transBtnEnabled { get; set; }
-
-            public InfoPaneData() { Clear(); }
-            public void Set(ViewPage page, bool moveEnable, bool labEnable, bool transEnable)
-            {
-                title = page.title;
-                resultText = page.m_resultText;
-                labBtnData = page.m_labBtnData;
-                transBtnPerc = page.m_transBtnPerc;
-
-                moveBtnEnabled = moveEnable;
-                labBtnEnabled = labEnable;
-                transBtnEnabled = transEnable;
-            }
-            public void Clear()
-            {
-                title = resultText = labBtnData = transBtnPerc = string.Empty;
-                moveBtnEnabled = labBtnEnabled = transBtnEnabled = false;
-            }
-        }
-        public InfoPaneData m_data { get; set; }
         public void Set( List<ViewPage> selectedPages, bool moveEnable, bool labEnable, bool transEnable)
         {
             //sums of selected stats
@@ -466,26 +443,26 @@ namespace WhichData
             }
 
             //layout info pane stats
-            m_data.title = selectedPages.Count + " Experiments Selected";
+            m_title = selectedPages.Count + " Experiments Selected";
 
             float sciGain = HighLogic.CurrentGame.Parameters.Career.ScienceGainMultiplier;
             recoverSci *= sciGain;
             transmitSci *= sciGain;
-            m_data.resultText =
+            m_resultText =
                 recoverSci.ToString("F1") + "pts recoverable science selected!\n" +
                 (selectedPages.Count - resetable) + " can discard, " + resetable + " can reset.\n" +
                 labAble + "/" + selectedPages.Count + " experiments available for lab copy.\n" +
                 transmitSci.ToString("F1") + "pts via transmitting science.";
 
-            m_data.labBtnData = "+" + labCopyData.ToString("F0");
+            m_labBtnData = "+" + labCopyData.ToString("F0");
 
             transmitAvg /= selectedPages.Count;
-            m_data.transBtnPerc = transmitAvg.ToString("F0") + "%";
+            m_transBtnPerc = transmitAvg.ToString("F0") + "%";
 
             //enable state from controller
-            m_data.moveBtnEnabled = moveEnable;
-            m_data.labBtnEnabled = labEnable;
-            m_data.transBtnEnabled = transEnable;
+            m_moveBtnEnabled = moveEnable;
+            m_labBtnEnabled = labEnable;
+            m_transBtnEnabled = transEnable;
             
         }
 
@@ -530,7 +507,7 @@ namespace WhichData
         {
             GUILayout.BeginHorizontal();
             {
-                GUILayout.Label(m_data.title);
+                GUILayout.Label(m_title);
                 closeBtn = GUILayout.Button("", m_closeBtnStyle);
             }
             GUILayout.EndHorizontal();
@@ -541,7 +518,7 @@ namespace WhichData
         public virtual void LayoutBody()
         {
             //the skin's box GUIStyle already has the green text and nice top left align
-            GUILayout.Box(m_data.resultText);
+            GUILayout.Box(m_resultText);
         }
 
         public void LayoutActionButtons()
@@ -550,12 +527,12 @@ namespace WhichData
             {
                 discardBtn = GUILayout.Button("", m_styleDiscardButton);
                 Color oldColor = GUI.color;
-                GUI.color = m_data.moveBtnEnabled ? Color.white : Color.grey; //HACKJEFFGIFFEN crap, need a state
+                GUI.color = m_moveBtnEnabled ? Color.white : Color.grey; //HACKJEFFGIFFEN crap, need a state
                 moveBtn = GUILayout.Button("", m_moveBtnStyle);
-                GUI.color = m_data.labBtnEnabled ? Color.white : Color.grey; //HACKJEFFGIFFEN crap, need a state
-                labBtn = GUILayout.Button(m_data.labBtnData, m_styleLabButton);
-                GUI.color = m_data.transBtnEnabled ? Color.white : Color.grey; //HACKJEFFGIFFEN crap, need a state
-                transmitBtn = GUILayout.Button(m_data.transBtnPerc, m_styleTransmitButton);
+                GUI.color = m_labBtnEnabled ? Color.white : Color.grey; //HACKJEFFGIFFEN crap, need a state
+                labBtn = GUILayout.Button(m_labBtnData, m_styleLabButton);
+                GUI.color = m_transBtnEnabled ? Color.white : Color.grey; //HACKJEFFGIFFEN crap, need a state
+                transmitBtn = GUILayout.Button(m_transBtnPerc, m_styleTransmitButton);
                 GUI.color = oldColor;
 
             }
@@ -620,14 +597,21 @@ namespace WhichData
         public void Set( ViewPage page, bool moveEnable, bool labEnable, bool transEnable )
         {
             m_page = page;
-            m_data.Set(m_page, moveEnable, labEnable, transEnable);
+            m_title = page.title;
+            m_resultText = page.m_resultText;
+            m_labBtnData = page.m_labBtnData;
+            m_transBtnPerc = page.m_transBtnPerc;
+
+            m_moveBtnEnabled = moveEnable;
+            m_labBtnEnabled = labEnable;
+            m_transBtnEnabled = transEnable;
         }
 
         public override void LayoutBody()
         {
 
             //the skin's box GUIStyle already has the green text and nice top left align
-            GUILayout.Box(m_data.resultText);
+            GUILayout.Box(m_resultText);
 
             LayoutInfoField(m_page);
             LayoutRecoverScienceBarField(m_page);
