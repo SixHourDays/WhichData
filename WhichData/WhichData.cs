@@ -21,7 +21,6 @@ namespace WhichData
         public float m_transmitValue;
         public float m_nextTransmitValue;
         public bool m_trnsWarnEnabled;
-        public bool m_labAble;
         public float m_labPts;
 
         //subjectID parsed
@@ -30,12 +29,12 @@ namespace WhichData
         public string m_situ;
         public string m_biome;
 
-        public DataPage(ScienceData sciData, IScienceDataContainer hostPart )
+        public DataPage(ScienceData sciData, ShipModel shipModel )
         {
             m_scienceData = sciData;
             m_subject = ResearchAndDevelopment.GetSubjectByID(m_scienceData.subjectID);
             //ModuleScienceContainer and ModuleScienceExperiment subclass this
-            m_dataModule = hostPart;
+            m_dataModule = shipModel.m_sciDataParts[sciData];
 
             //compose data used in row display
             //displayed science in KSP is always 2x the values used in bgr
@@ -44,11 +43,7 @@ namespace WhichData
             m_transmitValue = ResearchAndDevelopment.GetScienceValue(m_scienceData.dataAmount, m_subject, m_scienceData.transmitValue);
             m_nextTransmitValue = ResearchAndDevelopment.GetNextScienceValue(m_scienceData.dataAmount, m_subject, m_scienceData.transmitValue);
             m_trnsWarnEnabled = (m_dataModule is ModuleScienceExperiment) && !((ModuleScienceExperiment)m_dataModule).IsRerunnable();
-            m_labAble = ModuleScienceLab.IsLabData(FlightGlobals.ActiveVessel, m_scienceData);
-            //HACKJEFFGIFFEN
-            //m_labPts = ModuleScienceLab.GetBoostForVesselData(FlightGlobals.ActiveVessel, m_scienceData);
-            m_labPts = m_scienceData.labValue;
-
+            m_labPts = shipModel.GetLabResearchPoints( sciData );
 
             //parse out subjectIDs of the form (we ditch the @):
             //  crewReport@KerbinSrfLandedLaunchPad
@@ -162,7 +157,7 @@ namespace WhichData
                     Debug.Log("Giffen Aerospace WhichData error: " + error);
                 }
 
-                error = m_GUIView.Initialize();
+                error = m_GUIView.Initialize(this);
                 if (error != string.Empty)
                 {
                     //They can fail, cascading a cleanup & shutdown of the mod.
@@ -206,9 +201,8 @@ namespace WhichData
             new SortField("Situation",      (x, y) => Compare(x.m_situ, y.m_situ)),
             new SortField("Celes. Body",    (x, y) => Compare(x.m_body, y.m_body))
         };
-*/        bool m_dirtySelection = false;
-//        public List<DataPage> m_selectedPages = new List<DataPage>();
-        bool m_dirtyPages = false;
+*/
+        public bool m_dirtyPages = false;
         public List<DataPage> m_dataPages = new List<DataPage>();
 //        public RankedSorter m_rankSorter = new RankedSorter();
 //      HACKJEFFGIFFEN
@@ -290,8 +284,11 @@ namespace WhichData
                     return;
                 }
                 Debug.Log("GA Update blocked on R&D for " + waitCount + " frames");
+
                 ready = true;
             }
+
+            m_dirtyPages = false;
 
             m_shipModel.Update();
 
@@ -301,19 +298,31 @@ namespace WhichData
             {
                 m_dataPages.Clear();
                 //HACKJEFFGIFFEN the selected need preserved across this
-                foreach (ScienceData sciData in m_shipModel.m_scienceDatas)
-                {
-                    IScienceDataContainer part = m_shipModel.m_sciDataParts[sciData];
-                    m_dataPages.Add(new DataPage(sciData, part));
-                }
-
-                //HACKJEFFGIFFEN stupid pass
-                m_GUIView.m_viewPages.Clear();
-                m_dataPages.ForEach(page => m_GUIView.m_viewPages.Add(new ViewPage(page)));
+                m_shipModel.m_scienceDatas.ForEach(sciData => m_dataPages.Add(new DataPage(sciData, m_shipModel)));
                 m_dirtyPages = true; //new pages means we need to resort
             }
 
+            //view will propogate info
             m_GUIView.Update();
+
+            //remainder is calc & push data, if there is any
+            if (m_dataPages.Count > 0)
+            {
+                //get selection from view    
+                if (m_GUIView.m_dirtySelection)
+                {
+                    //newly selected means updating the view info
+                    int resetable = m_GUIView.m_selectedPages.FindAll(pg => pg.m_src.m_dataModule is ModuleScienceExperiment).Count; //number of selected that are resettable
+                    int labableCount = m_GUIView.m_selectedPages.FindAll(pg => pg.m_src.m_labPts > 0).Count; //number of selected that could lab copy
+
+                    bool moveable = (m_shipModel.m_containerModules.Count > 0 && resetable > 0); //experi result -> pod data
+                    moveable |= (m_shipModel.m_containerModules.Count > 1 && m_GUIView.m_selectedPages.Count - resetable > 0); //pod1 data -> pod2 data
+                    bool labable = m_shipModel.m_labModules.Count > 0 && labableCount > 0; //need lab & needs to be unique to said lab
+                    bool transable = m_shipModel.m_radioModules.Count > 0; //need a radio
+
+                    m_GUIView.SetViewInfo(moveable, labable, transable);
+                }
+            }
 
 
             //HACKJEFFGIFFEN old below
@@ -339,7 +348,7 @@ namespace WhichData
                                         {
                                             //ProcessMoveData needs to know clickedPart to skip src==dst selections
                                             //capture in a lambda, pass that instead ;-)
-                                            Func<DataPage, bool> delgt = (DataPage page) => {return ProcessMoveData(page, clickedPart); };
+                                           Func<DataPage, bool> delgt = (DataPage page) => {return ProcessMoveData(page, clickedPart); };
                                             ReverseProcessSelected(delgt);
 
                                             endPicking = true;

@@ -12,7 +12,7 @@ namespace WhichData
         public DataPage m_src; //TODOJEFFGIFFEN
 
         //hud state
-        public int m_index = 0; //into m_dataPages
+        public int m_index = 0; //into m_viewPages
         public bool m_selected = false;
         public bool m_rowButton = false;
 
@@ -37,8 +37,6 @@ namespace WhichData
         public string m_transBtnPerc; //0% when sci is 0 pts, and integer % otherwise
         public string m_labBtnData;
 
-        //hacks 1
-        public float m_sciHack = 2.0f;
         public ViewPage(DataPage src)
         {
             m_src = src;
@@ -46,12 +44,15 @@ namespace WhichData
             ScienceData scidata = m_src.m_scienceData;
 
             m_resultText = ResearchAndDevelopment.GetResults(subject.id);
+
+            //all displayed science is boosted by this
+            float sciGain = HighLogic.CurrentGame.Parameters.Career.ScienceGainMultiplier;
+
             //compose data used in row display
-            //displayed science in KSP is always 2x the values used in bgr
-            m_rcvrValue = (m_src.m_fullValue * m_sciHack).ToString("F1");
+            m_rcvrValue = (m_src.m_fullValue * sciGain).ToString("F1");
             m_rcvrPrcnt = m_src.m_fullValue / subject.scienceCap;
 
-            float transmitValue = m_src.m_transmitValue * m_sciHack;
+            float transmitValue = m_src.m_transmitValue * sciGain;
             m_trnsValue = transmitValue.ToString("F1");
             m_trnsPrcnt = m_src.m_transmitValue / subject.scienceCap; //TODOJEFFGIFFEN AAAAUGH why god why (always too low)
 
@@ -102,24 +103,58 @@ namespace WhichData
 
         //GUI state
         //HACKJEFFGIFFEN make the InfoPane's directly use w parent member?
+
         public bool m_moveBtnEnabled = false;
         public bool m_labBtnEnabled = false;
-        public bool m_transmitBtnEnabled = false;
+        public bool m_transBtnEnabled = false;
         public Vector2 m_scrollPos;
 
-        //HACKJEFFGIFFEN just this for now
-        ViewPageInfoPane m_infoPane = new ViewPageInfoPane();
+
+        WhichData m_controller;
+
+        public BaseInfoPane m_baseInfoPane = new BaseInfoPane();
+        public ViewPageInfoPane m_viewPageInfoPane = new ViewPageInfoPane();
+        public BaseInfoPane m_infoPane; //is always one or the other of above
+
+        //push button state to view, update view info pane w selected pages
+        public void SetViewInfo(bool moveEnable, bool labEnable, bool transEnable)
+        {
+            if ( m_selectedPages.Count > 0)
+            {
+                if (m_selectedPages.Count == 1)
+                {
+                    //display one page, traditional info pane
+                    m_viewPageInfoPane.Set(m_selectedPages.First(), moveEnable, labEnable, transEnable);
+                    m_infoPane = m_viewPageInfoPane;
+                }
+                else
+                {
+                    //display summary of selected pages, custom info pane
+                    m_baseInfoPane.Set(m_selectedPages, moveEnable, labEnable, transEnable);
+                    m_infoPane = m_baseInfoPane;
+                }
+            }
+        }
 
         //returns empty string on success, error string on failure
-        public string Initialize()
+        public string Initialize(WhichData controller)
         {
             Debug.Log("GA GUIView::Initialize");
-            string errorMsg = m_infoPane.Initialize();
+            string errorMsg = m_baseInfoPane.Initialize();
             if ( errorMsg != string.Empty)
             {
                 //HACKJEFFGIFFEN
                 return errorMsg;
             }
+            errorMsg = m_viewPageInfoPane.Initialize();
+            if (errorMsg != string.Empty)
+            {
+                //HACKJEFFGIFFEN
+                return errorMsg;
+            }
+
+            m_infoPane = m_baseInfoPane;
+            m_controller = controller;
 
             //TODOJEFFGIFFEN start validating the loads against bad data, return appropriate errors
             GUISkin[] skins = Resources.FindObjectsOfTypeAll<GUISkin>();
@@ -152,6 +187,7 @@ namespace WhichData
 
         //HACKJEFFGIFFEN
         public List<ViewPage> m_viewPages = new List<ViewPage>();
+        public bool m_dirtySelection = false;
         public List<ViewPage> m_selectedPages = new List<ViewPage>();
         public void OnGUI()
         {
@@ -265,6 +301,24 @@ namespace WhichData
 
         public void Update()
         {
+            m_dirtySelection = false;
+
+            //when controller updates, view updates
+            if (m_controller.m_dirtyPages)
+            {
+                //HACKJEFFGIFFEN the selected need preserved across this
+                m_viewPages.Clear();
+                m_selectedPages.Clear();
+
+                m_controller.m_dataPages.ForEach(page => m_viewPages.Add(new ViewPage(page)));
+
+                //rebuild indices
+                int i = 0;
+                m_viewPages.ForEach(viewPage => viewPage.m_index = i++);
+
+                m_dirtySelection = true;
+            }
+
             if (m_showUI && m_viewPages.Count > 0)
             {
                 //list click handling
@@ -273,7 +327,6 @@ namespace WhichData
                 if (m_selectedPages.Count == 0)
                 {
                     m_viewPages.First().m_rowButton = true; //fake a click
-//HACKJEFFGIFFEN                    m_dirtySelection = true;
                 }
 
                 //find first page with its row button clicked (or none, giving null)
@@ -285,17 +338,17 @@ namespace WhichData
                     m_selectedPages.ForEach(page => page.m_selected = false);
 
                     //now discern whether click or altclick (note altclick requires prev regular click)
-/*HACKJEFFGIFFEN                    if (Input.GetKey(KeyCode.LeftAlt) || Input.GetKey(KeyCode.RightAlt))
+                    if (Input.GetKey(KeyCode.LeftAlt) || Input.GetKey(KeyCode.RightAlt))
                     {
                         int a = m_selectedPages.First().m_index; //smallest selected index 
                         int b = m_selectedPages.Last().m_index; //largest
                         int c = selectedPage.m_index; //brand new index chosen
                         int start = Math.Min(Math.Min(a, b), c);
                         int end = Math.Max(Math.Max(a, b), c);
-                        m_selectedPages = m_dataPages.GetRange(start, end - start + 1); // inclusive range
+                        m_selectedPages = m_viewPages.GetRange(start, end - start + 1); // inclusive range
                     }
                     else
-  */                  {
+                    {
                         m_selectedPages.Clear();
                         m_selectedPages.Add(selectedPage);
                     }
@@ -303,10 +356,7 @@ namespace WhichData
                     //highlight all the new
                     m_selectedPages.ForEach(page => page.m_selected = true);
 
-                    //HACKJEFFGIFFEN push the select to the infopane
-                    Debug.Log("GA m_infoPane.page set");
-                    m_infoPane.page = m_selectedPages.First();
-//HACKJEFFGIFFEN                    m_dirtySelection = true;
+                    m_dirtySelection = true;
                 }
             }
         }
@@ -326,6 +376,8 @@ namespace WhichData
         public virtual string Initialize()
         {
             string errorMsg = string.Empty;
+
+            m_data = new InfoPaneData();
 
             //TODOJEFFGIFFEN start validating the loads against bad data, return appropriate errors
 
@@ -353,20 +405,89 @@ namespace WhichData
             return errorMsg;
         }
 
-        //in //HACKJEFFGIFFEN this is a LOT of access.  state pack?
-        public string title { get; set; }
-        public string resultText { get; set; }
-        public bool moveBtnEnabled { get; set; }
-        public bool labBtnEnabled { get; set; }
-        public string labBtnData { get; set; }
-        public bool transmitBtnEnabled { get; set; }
-        public string transBtnPerc { get; set; }//0% when sci is 0 pts, and integer % otherwise
-        //out
+        //out state of buttons
         public bool closeBtn { get; set; }
         public bool discardBtn { get; set; }
         public bool moveBtn { get; set; }
         public bool labBtn { get; set; }
         public bool transmitBtn { get; set; }
+
+        //TODOJEFFGIFFEN dissassemble into base
+        public class InfoPaneData
+        {
+            public string title { get; set; }
+            public string resultText { get; set; }
+            public string labBtnData { get; set; }
+            public string transBtnPerc { get; set; }//0% when sci is 0 pts, and integer % otherwise
+
+            public bool moveBtnEnabled { get; set; }
+            public bool labBtnEnabled { get; set; }
+            public bool transBtnEnabled { get; set; }
+
+            public InfoPaneData() { Clear(); }
+            public void Set(ViewPage page, bool moveEnable, bool labEnable, bool transEnable)
+            {
+                title = page.title;
+                resultText = page.m_resultText;
+                labBtnData = page.m_labBtnData;
+                transBtnPerc = page.m_transBtnPerc;
+
+                moveBtnEnabled = moveEnable;
+                labBtnEnabled = labEnable;
+                transBtnEnabled = transEnable;
+            }
+            public void Clear()
+            {
+                title = resultText = labBtnData = transBtnPerc = string.Empty;
+                moveBtnEnabled = labBtnEnabled = transBtnEnabled = false;
+            }
+        }
+        public InfoPaneData m_data { get; set; }
+        public void Set( List<ViewPage> selectedPages, bool moveEnable, bool labEnable, bool transEnable)
+        {
+            //sums of selected stats
+            float recoverSci = 0.0f;
+            int resetable = 0;
+            int labAble = 0;
+            float labCopyData = 0.0f;
+            float transmitAvg = 0.0f;
+            float transmitSci = 0.0f;
+            foreach (ViewPage viewPage in selectedPages)
+            {
+                DataPage page = viewPage.m_src;
+                recoverSci += page.m_fullValue;
+
+                if (page.m_dataModule is ModuleScienceExperiment) { resetable += 1; }
+                if (page.m_labPts > 0) { labAble += 1; }
+                labCopyData += page.m_labPts;
+
+                transmitAvg += page.m_scienceData.transmitValue * 100f; //HACKJEFFGIFFEN discarding the 0 trans = 0 % cases
+                transmitSci += page.m_transmitValue;
+            }
+
+            //layout info pane stats
+            m_data.title = selectedPages.Count + " Experiments Selected";
+
+            float sciGain = HighLogic.CurrentGame.Parameters.Career.ScienceGainMultiplier;
+            recoverSci *= sciGain;
+            transmitSci *= sciGain;
+            m_data.resultText =
+                recoverSci.ToString("F1") + "pts recoverable science selected!\n" +
+                (selectedPages.Count - resetable) + " can discard, " + resetable + " can reset.\n" +
+                labAble + "/" + selectedPages.Count + " experiments available for lab copy.\n" +
+                transmitSci.ToString("F1") + "pts via transmitting science.";
+
+            m_data.labBtnData = "+" + labCopyData.ToString("F0");
+
+            transmitAvg /= selectedPages.Count;
+            m_data.transBtnPerc = transmitAvg.ToString("F0") + "%";
+
+            //enable state from controller
+            m_data.moveBtnEnabled = moveEnable;
+            m_data.labBtnEnabled = labEnable;
+            m_data.transBtnEnabled = transEnable;
+            
+        }
 
         //6px border all around.  Then 14px of window title, 6px again below it to sync to orig window top.
         public Rect m_infoPaneRect = new Rect(500 + 3, 6, 391 - 3, 240 + 64 - 6 * 2); //note, top/bottom pad, 3 combined w list's 6 = 9 left pad.  no right pad (made of dropshadow).
@@ -388,9 +509,6 @@ namespace WhichData
                         //Main left column
                         GUILayout.BeginVertical();
                         {
-                            //the skin's box GUIStyle already has the green text and nice top left align
-                            GUILayout.Box(resultText);
-
                             LayoutBody();
                         }
                         GUILayout.EndVertical();
@@ -412,7 +530,7 @@ namespace WhichData
         {
             GUILayout.BeginHorizontal();
             {
-                GUILayout.Label(title);
+                GUILayout.Label(m_data.title);
                 closeBtn = GUILayout.Button("", m_closeBtnStyle);
             }
             GUILayout.EndHorizontal();
@@ -420,9 +538,11 @@ namespace WhichData
             GUILayout.Space(4); //HACKJEFFGIFFEN to align with the list pane's top
         }
 
-        //the vertical layout + box became common
         public virtual void LayoutBody()
-        {}
+        {
+            //the skin's box GUIStyle already has the green text and nice top left align
+            GUILayout.Box(m_data.resultText);
+        }
 
         public void LayoutActionButtons()
         {
@@ -430,12 +550,12 @@ namespace WhichData
             {
                 discardBtn = GUILayout.Button("", m_styleDiscardButton);
                 Color oldColor = GUI.color;
-                GUI.color = moveBtnEnabled ? Color.white : Color.grey; //HACKJEFFGIFFEN crap, need a state
+                GUI.color = m_data.moveBtnEnabled ? Color.white : Color.grey; //HACKJEFFGIFFEN crap, need a state
                 moveBtn = GUILayout.Button("", m_moveBtnStyle);
-                GUI.color = labBtnEnabled ? Color.white : Color.grey; //HACKJEFFGIFFEN crap, need a state
-                labBtn = GUILayout.Button(labBtnData, m_styleLabButton);
-                GUI.color = transmitBtnEnabled ? Color.white : Color.grey; //HACKJEFFGIFFEN crap, need a state
-                transmitBtn = GUILayout.Button(transBtnPerc, m_styleTransmitButton);
+                GUI.color = m_data.labBtnEnabled ? Color.white : Color.grey; //HACKJEFFGIFFEN crap, need a state
+                labBtn = GUILayout.Button(m_data.labBtnData, m_styleLabButton);
+                GUI.color = m_data.transBtnEnabled ? Color.white : Color.grey; //HACKJEFFGIFFEN crap, need a state
+                transmitBtn = GUILayout.Button(m_data.transBtnPerc, m_styleTransmitButton);
                 GUI.color = oldColor;
 
             }
@@ -497,24 +617,21 @@ namespace WhichData
 
         //page we'll be displaying
         private ViewPage m_page;
-        public ViewPage page
+        public void Set( ViewPage page, bool moveEnable, bool labEnable, bool transEnable )
         {
-            get { return m_page; }
-            set
-            {
-                m_page = value;
-                title = m_page.title;             //set base members
-                resultText = m_page.m_resultText;
-                labBtnData = m_page.m_labBtnData;
-                transBtnPerc = m_page.m_transBtnPerc;
-             }
+            m_page = page;
+            m_data.Set(m_page, moveEnable, labEnable, transEnable);
         }
 
         public override void LayoutBody()
         {
-            LayoutInfoField(page);
-            LayoutRecoverScienceBarField(page);
-            LayoutTransmitScienceBarField(page);
+
+            //the skin's box GUIStyle already has the green text and nice top left align
+            GUILayout.Box(m_data.resultText);
+
+            LayoutInfoField(m_page);
+            LayoutRecoverScienceBarField(m_page);
+            LayoutTransmitScienceBarField(m_page);
         }
 
         public void LayoutInfoField(ViewPage page)

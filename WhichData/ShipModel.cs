@@ -156,7 +156,47 @@ namespace WhichData
                 //...
             }
         }
-         
+
+        public float GetLabResearchPoints(ScienceData sciData)
+        {
+            //no labs
+            if (m_labModules.Count == 0) { return 0f; }
+
+            ModuleScienceLab lab = m_labModules.First(); //TODOJEFFGIFFEN multilab tests
+
+            //lab already has data
+            if (lab.ExperimentData.Any(rsrch => rsrch == sciData.subjectID)) { return 0f; }
+            //if (!ModuleScienceLab.IsLabData(FlightGlobals.ActiveVessel, d)) { return 0f; }
+
+            CelestialBody body = FlightGlobals.getMainBody();
+            
+            float scalar = 1f;
+
+            //surface boost
+            bool grounded = FlightGlobals.ActiveVessel.Landed || FlightGlobals.ActiveVessel.Splashed;
+            if (grounded)
+            {
+                scalar *= 1f + lab.SurfaceBonus;
+                
+                //kerbin penalty
+                if (body.isHomeWorld)
+                {
+                    scalar *= lab.homeworldMultiplier;
+                }
+            }
+            
+            //neighborhood boost
+            if (sciData.subjectID.Contains(body.bodyName))
+            {
+                scalar *= 1f + lab.ContextBonus;
+            }
+
+            ScienceSubject subject = ResearchAndDevelopment.GetSubjectByID(sciData.subjectID);
+            float refValue = ResearchAndDevelopment.GetReferenceDataValue(sciData.dataAmount, subject);
+            float sciMultiplier = HighLogic.CurrentGame.Parameters.Career.ScienceGainMultiplier;
+            
+            return refValue * scalar * sciMultiplier;
+        }
 
         //returns empty string on success, error string on failure
         public string Initialize()

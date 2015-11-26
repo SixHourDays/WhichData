@@ -12,17 +12,18 @@ title and box restored
 lab & trans btn #'s restored
 dont render in 0 scidata case (GUIView)
 remember that AUTO properties give a free private backing store, NORMAL properties I have to provide it!!
+explicitly wrote the experi->research pts conversion (thanks xEvilReeperx), to fix lab pts
+GUIView registers single/group selections
+BaseInfoPane can now sum & display a group of ViewPages
+control, not GUIView, now determines proper action button locking based on selection & model state
+GUIView self-switches between BaseInfoPane and ViewPageInfoPane depending on selection
 
 doing:
-why does the lab value not work like it used to?
-control is update, internal collection pump, update
-view is a HACK mess to get a single select going
-final split class reorganize of the two info panes
-put some of the select code back in GUIView
-
+evolving sequence is: model->control->view, view input->control, control->model & view
+should decompose InfoPaneData, never used for pass along
+control should track actual selectees
+preservation of selectees across model changes.
 part gain / loss updates to data - shitty full rebuild in control, shitty full copy to view
-temporarily running single only to finish links across objects
-control & view datas parred down, view nest constructs off control, handy properties to hide members
 dialog visually matches: so trans + next trans is 1px off.....
 
 todo:
