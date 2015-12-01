@@ -19,20 +19,21 @@ control, not GUIView, now determines proper action button locking based on selec
 GUIView self-switches between BaseInfoPane and ViewPageInfoPane depending on selection
 list selection to view info pane (passback,passfwd)
 alt-click group selection in list
+control tracks selectees
+make original buttons work on selected (passback x2)
+partial button operation: x of n selected can be labbed, etc
 
 doing:
-update group text for when move / lab / radio is disabled
+sciences going to R&D should also retrigger the dialogs...bar values will change
 evolving sequence is: model->control->view, view input->control, control->model & view
-control should track actual selectees
-preservation of selectees across model changes.
 part gain / loss updates to data - shitty full rebuild in control, shitty full copy to view
 dialog visually matches: so trans + next trans is 1px off.....
 
 todo:
+update group text for when move / lab / radio is disabled
+preservation of selectees across model changes.
 listen for deployed to catch more science inserting to the dialog
 listen for reset to clear a data
-make original buttons work on selected (passback x2)
-partial button operation: x of n selected can be labbed, etc
 create sort toggles on list entries
 sort list with ranked toggling
 review data spawns my dialog instead

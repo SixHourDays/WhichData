@@ -123,6 +123,7 @@ namespace WhichData
         {
             if ( m_selectedPages.Count > 0)
             {
+                Debug.Log("GA view setup info pane & action buttons");
                 if (m_selectedPages.Count == 1)
                 {
                     //display one page, traditional info pane
@@ -308,6 +309,7 @@ namespace WhichData
             //when controller updates, view updates
             if (m_controller.m_dirtyPages)
             {
+                Debug.Log("GA rebuild view pages");
                 //HACKJEFFGIFFEN the selected need preserved across this
                 m_viewPages.Clear();
                 m_selectedPages.Clear();
@@ -336,6 +338,8 @@ namespace WhichData
 
                 if (selectedPage != null)
                 {
+                    Debug.Log("GA view new selection");
+
                     //unhighlight all the old
                     m_selectedPages.ForEach(page => page.m_selected = false);
 
@@ -534,7 +538,6 @@ namespace WhichData
                 GUI.color = m_transBtnEnabled ? Color.white : Color.grey; //HACKJEFFGIFFEN crap, need a state
                 transmitBtn = GUILayout.Button(m_transBtnPerc, m_styleTransmitButton);
                 GUI.color = oldColor;
-
             }
             GUILayout.EndVertical();
         }

@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Reflection;
 using System.Text;
 using UnityEngine;
 
@@ -88,6 +89,8 @@ namespace WhichData
 
         //ship ScienceData flattened
         public List<ScienceData> m_scienceDatas = new List<ScienceData>();
+        //ship lab research subjects flattened
+        public List<string> m_researchIDs = new List<string>();
 
         //crew
         //TODOJEFFGIFFEN
@@ -144,6 +147,15 @@ namespace WhichData
                     foreach( ScienceData data in datas ) { m_sciDataParts.Add(data, part); }
                 }
             }
+
+            //the labs researched subjects alter the worth of the science datas
+            List<string> researchIDs = new List<string>();
+            m_labModules.ForEach(lab => researchIDs.AddRange(lab.ExperimentData));
+            if ( !researchIDs.SequenceEqual(m_researchIDs))
+            {
+                m_flags.scienceDatasDirty = true;
+                m_researchIDs = researchIDs;
+            }
         }
 
         private void ScanCrew()
@@ -165,7 +177,7 @@ namespace WhichData
             ModuleScienceLab lab = m_labModules.First(); //TODOJEFFGIFFEN multilab tests
 
             //lab already has data
-            if (lab.ExperimentData.Any(rsrch => rsrch == sciData.subjectID)) { return 0f; }
+            if (lab.ExperimentData.Contains(sciData.subjectID)) { return 0f; }
             //if (!ModuleScienceLab.IsLabData(FlightGlobals.ActiveVessel, d)) { return 0f; }
 
             CelestialBody body = FlightGlobals.getMainBody();
@@ -198,12 +210,131 @@ namespace WhichData
             return refValue * scalar * sciMultiplier;
         }
 
+        WhichData m_controller;
+
+        public void DiscardScienceDatas(List<ScienceData> discards)
+        {
+            //remove data from parts
+            Debug.Log("GA model discarding " + discards.Count);
+            discards.ForEach( sd => m_sciDataParts[sd].DumpData(sd) );
+
+            m_scienceEventOccured = true;
+        }
+
+        protected class ResearchDatum
+        {
+            public ScienceData scienceData;
+            public float researchPoints;
+            public ResearchDatum(DataPage d)
+            {
+                scienceData = d.m_scienceData;
+                researchPoints = d.m_labPts;
+            }
+        }
+
+        protected List<ResearchDatum> m_labCopyQueue = new List<ResearchDatum>();
+        protected bool m_copying = false;
+
+        protected void FinishLabCopy( ScienceData finishedData )
+        {
+            m_copying = false;              //clear guard bool
+
+            ResearchDatum rd = m_labCopyQueue.First();
+            Debug.Log("GA model finish lab copy " + m_labCopyQueue.Count + " " + rd.scienceData.title);
+
+            //HACKJEFFGIFFEN the lab copy fails (missing the ExperiDlg), so we manually add the pts
+            m_labModules.First().dataStored += rd.researchPoints;
+            
+            m_labCopyQueue.RemoveAt(0);     //dequeue finished data
+            m_scienceEventOccured = true;   //the experiment will re-appeared in the container //TODOJEFFGIFFEN verify
+
+            //continue through queue
+            StartNextLabCopy();
+        }
+
+        protected void StartNextLabCopy()
+        {
+            //TODOJEFFGIFFEN multiple labs concerns
+            //TODOJEFFGIFFEN possible to leave scene overtop of processing long time...
+            if (!m_copying)
+            {
+                //HACKJEFFGIFFEN does..the lab fail after copy on data full?
+                if (m_labCopyQueue.Count > 0)
+                {
+                    m_copying = true;
+                    Debug.Log("GA model start lab copy " + m_labCopyQueue.Count + " " + m_labCopyQueue.First().scienceData.title);
+
+                    m_controller.LaunchCoroutine(
+                        m_labModules.First().ProcessData(m_labCopyQueue.First().scienceData, FinishLabCopy)
+                    );
+                }
+            }
+        }
+
+        public void ProcessLabDatas(List<DataPage> dataPages)
+        {
+            //queue up & run lab copy data
+            dataPages.ForEach(dp => m_labCopyQueue.Add(new ResearchDatum(dp)));
+            StartNextLabCopy();
+
+            //consider it queued in lab, so remove from parts
+            //TODOJEFFGIFFEN cant re-add to experi...so we leave it?
+            //dataPages.ForEach(dp => dp.m_dataModule.DumpData(dp.m_scienceData));
+
+            m_scienceEventOccured = true;
+        }
+
+        public void ProcessTransmitDatas(List<ScienceData> datas)
+        {
+            Debug.Log("GA model transmit:");
+            datas.ForEach(sd => Debug.Log(sd.subjectID));
+            //TODOJEFFGIFFEN choosing radio
+            //TODOJEFFGIFFEN kill during transmit concern
+            m_radioModules.First().TransmitData(datas);
+
+            //consider it queued in radio?, so remove from parts
+            datas.ForEach(sd => m_sciDataParts[sd].DumpData(sd));
+
+            m_scienceEventOccured = true;
+        }
+
+        void HighlightPart(Part part, Color color)
+        {
+            //old normal based glow
+            part.SetHighlightType(Part.HighlightType.AlwaysOn);
+            part.SetHighlightColor(color);
+            part.SetHighlight(true, false);
+
+            //PPFX glow edge highlight
+            GameObject go = part.FindModelTransform("model").gameObject;
+            HighlightingSystem.Highlighter hl = go.GetComponent<HighlightingSystem.Highlighter>();
+            if (hl == null) { hl = go.AddComponent<HighlightingSystem.Highlighter>(); }
+            hl.ConstantOn(color);
+            hl.SeeThroughOn();
+        }
+
+        void UnHighlightPart(Part part)
+        {
+            //old normal based glow
+            part.SetHighlightDefault();
+            part.SetHighlight(false, false);
+
+            //PPFX glow edge highlight
+            GameObject go = part.FindModelTransform("model").gameObject;
+            HighlightingSystem.Highlighter hl = go.GetComponent<HighlightingSystem.Highlighter>();
+            if (hl != null)
+            {
+                hl.ConstantOff();
+            }
+        }
+
         //returns empty string on success, error string on failure
-        public string Initialize()
+        public string Initialize(WhichData controller)
         {
             string errorMsg = string.Empty;
-            //TODOJEFFGIFFEN no init needed
 
+            m_controller = controller;
+            
             return errorMsg;
         }
 
@@ -217,6 +348,45 @@ namespace WhichData
             if (m_partEventOccured || m_crewEventOccured) { ScanCrew(); }
 
             m_partEventOccured = m_scienceEventOccured = m_crewEventOccured = false;
+        }
+
+        //HACKJEFFGIFFEN
+        static void ExploreClass(string typeName)
+        {
+            Debug.Log("GA ExploreClass " + typeName);
+            
+            //grabbing types from assemblies other than yours needs fully qualified name
+            string fullyQualName = typeName + ", Assembly-CSharp, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null";
+            Type t = Type.GetType(fullyQualName);
+
+            FieldInfo[] privFields = t.GetFields(BindingFlags.Instance | BindingFlags.NonPublic); //specifically search for non-public instance methods to find hidden/private ones
+            foreach (FieldInfo field in privFields)
+            {
+                Debug.Log("GA field: " + field.FieldType.Name + " " + field.Name);
+            }
+
+            PropertyInfo[] privProps = t.GetProperties(BindingFlags.Instance | BindingFlags.NonPublic);
+            foreach (PropertyInfo prop in privProps)
+            {
+                Debug.Log("GA prop: writeable " + prop.CanWrite + " " + prop.PropertyType.Name + " " + prop.Name);
+            }
+
+            object[] privAttri = t.GetCustomAttributes(true); //include hierarchy
+            foreach (object attri in privAttri)
+            {
+                Debug.Log("GA attri: " + attri.ToString());
+            }
+
+            MethodInfo[] privMethods = t.GetMethods(BindingFlags.Instance | BindingFlags.NonPublic);
+            foreach (MethodInfo method in privMethods)
+            {
+                string paramas = string.Empty;
+                foreach (ParameterInfo pi in method.GetParameters())
+                {
+                    paramas += " " + pi.ParameterType.Name + " " + pi.Name;
+                }
+                Debug.Log("GA method: " + method.ReturnType.ToString() + " " + method.Name + paramas);
+            }
         }
     }
 }
