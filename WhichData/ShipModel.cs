@@ -144,7 +144,12 @@ namespace WhichData
                 foreach (IScienceDataContainer part in m_sciDataModules)
                 {   //HACKJEFFGIFFEN do faster later
                     ScienceData[] datas = part.GetData();
-                    foreach( ScienceData data in datas ) { m_sciDataParts.Add(data, part); }
+                    foreach ( ScienceData data in datas )
+                    {
+                        Debug.Log("GA dict add " + data.subjectID + " " + part.ToString());
+                        m_sciDataParts.Add(data, part);
+                    }
+
                 }
             }
 
@@ -169,6 +174,110 @@ namespace WhichData
             }
         }
 
+        WhichData m_controller;
+
+        public void DiscardScienceDatas(List<ScienceData> discards)
+        {
+            //remove data from parts
+            Debug.Log("GA model discarding " + discards.Count);
+            discards.ForEach( sd => m_sciDataParts[sd].DumpData(sd) );
+
+            m_scienceEventOccured = true;
+        }
+
+
+        void HighlightPart(Part part, Color color)
+        {
+            //old normal based glow
+            part.SetHighlightType(Part.HighlightType.AlwaysOn);
+            part.SetHighlightColor(color);
+            part.SetHighlight(true, false);
+
+            //PPFX glow edge highlight
+            GameObject go = part.FindModelTransform("model").gameObject;
+            HighlightingSystem.Highlighter hl = go.GetComponent<HighlightingSystem.Highlighter>();
+            if (hl == null) { hl = go.AddComponent<HighlightingSystem.Highlighter>(); }
+            hl.ConstantOn(color);
+            hl.SeeThroughOn();
+        }
+
+        void UnHighlightPart(Part part)
+        {
+            //old normal based glow
+            part.SetHighlightDefault();
+            part.SetHighlight(false, false);
+
+            //PPFX glow edge highlight
+            GameObject go = part.FindModelTransform("model").gameObject;
+            HighlightingSystem.Highlighter hl = go.GetComponent<HighlightingSystem.Highlighter>();
+            if (hl != null)
+            {
+                hl.ConstantOff();
+            }
+        }
+
+        public void HighlightContainers(Color color)
+        {
+            m_containerModules.ForEach(cont => HighlightPart(cont.part, color));
+        }
+
+        public void UnhighlightContainers()
+        {
+            m_containerModules.ForEach(cont => UnHighlightPart(cont.part));
+        }
+
+        public bool HaveClickedPart(Vector3 screenClick, out Part clickedPart)
+        {
+            clickedPart = null;
+
+            Ray clickRay = Camera.main.ScreenPointToRay(screenClick);
+            RaycastHit hit;
+            bool strike = Physics.Raycast(clickRay, out hit, 2500f, 1 << 0); //2.5km length.  Note ship parts are on layer 0, mask needs to be 1<<layer desired
+            if (strike)
+            {
+                clickedPart = hit.collider.gameObject.GetComponentInParent<Part>(); //the collider's gameobject is child to partmodule's gameobject
+            }
+
+            return clickedPart != null;
+        }
+
+        public bool IsPartSciContainer(Part part, out ModuleScienceContainer clickedContainer)
+        {
+            clickedContainer = m_containerModules.Find(sciCont => sciCont.part == part);
+            return clickedContainer != null;
+        }
+
+        public class DataMove
+        {
+            public ScienceData m_sciData;
+            public IScienceDataContainer m_src;
+            public ModuleScienceContainer m_dst;
+            public DataMove(ModuleScienceContainer dst, IScienceDataContainer src, ScienceData sd)
+            {
+                m_sciData = sd;
+                m_src = src;
+                m_dst = dst;
+
+                src.DumpData(sd); //begin the dump
+            }
+            public bool IsComplete()
+            {
+                if ( !m_src.GetData().Contains(m_sciData) ) //dump data seems to take 1 frame to complete so poll
+                {
+                    //once DumpData is done, AddData is instantaneous
+                    m_dst.AddData(m_sciData);
+                    return true;
+                }
+                return false;
+            }
+        }
+
+        public List<DataMove> m_dataMoves = new List<DataMove>();
+        public void ProcessMoveDatas(ModuleScienceContainer dst, List<ScienceData> sources)
+        {
+            sources.ForEach(sd=> m_dataMoves.Add(new DataMove( dst, m_sciDataParts[sd], sd)));
+        }
+
         public float GetLabResearchPoints(ScienceData sciData)
         {
             //no labs
@@ -181,7 +290,7 @@ namespace WhichData
             //if (!ModuleScienceLab.IsLabData(FlightGlobals.ActiveVessel, d)) { return 0f; }
 
             CelestialBody body = FlightGlobals.getMainBody();
-            
+
             float scalar = 1f;
 
             //surface boost
@@ -189,14 +298,14 @@ namespace WhichData
             if (grounded)
             {
                 scalar *= 1f + lab.SurfaceBonus;
-                
+
                 //kerbin penalty
                 if (body.isHomeWorld)
                 {
                     scalar *= lab.homeworldMultiplier;
                 }
             }
-            
+
             //neighborhood boost
             if (sciData.subjectID.Contains(body.bodyName))
             {
@@ -206,19 +315,8 @@ namespace WhichData
             ScienceSubject subject = ResearchAndDevelopment.GetSubjectByID(sciData.subjectID);
             float refValue = ResearchAndDevelopment.GetReferenceDataValue(sciData.dataAmount, subject);
             float sciMultiplier = HighLogic.CurrentGame.Parameters.Career.ScienceGainMultiplier;
-            
+
             return refValue * scalar * sciMultiplier;
-        }
-
-        WhichData m_controller;
-
-        public void DiscardScienceDatas(List<ScienceData> discards)
-        {
-            //remove data from parts
-            Debug.Log("GA model discarding " + discards.Count);
-            discards.ForEach( sd => m_sciDataParts[sd].DumpData(sd) );
-
-            m_scienceEventOccured = true;
         }
 
         protected class ResearchDatum
@@ -284,6 +382,7 @@ namespace WhichData
             m_scienceEventOccured = true;
         }
 
+
         public void ProcessTransmitDatas(List<ScienceData> datas)
         {
             Debug.Log("GA model transmit:");
@@ -298,35 +397,6 @@ namespace WhichData
             m_scienceEventOccured = true;
         }
 
-        void HighlightPart(Part part, Color color)
-        {
-            //old normal based glow
-            part.SetHighlightType(Part.HighlightType.AlwaysOn);
-            part.SetHighlightColor(color);
-            part.SetHighlight(true, false);
-
-            //PPFX glow edge highlight
-            GameObject go = part.FindModelTransform("model").gameObject;
-            HighlightingSystem.Highlighter hl = go.GetComponent<HighlightingSystem.Highlighter>();
-            if (hl == null) { hl = go.AddComponent<HighlightingSystem.Highlighter>(); }
-            hl.ConstantOn(color);
-            hl.SeeThroughOn();
-        }
-
-        void UnHighlightPart(Part part)
-        {
-            //old normal based glow
-            part.SetHighlightDefault();
-            part.SetHighlight(false, false);
-
-            //PPFX glow edge highlight
-            GameObject go = part.FindModelTransform("model").gameObject;
-            HighlightingSystem.Highlighter hl = go.GetComponent<HighlightingSystem.Highlighter>();
-            if (hl != null)
-            {
-                hl.ConstantOff();
-            }
-        }
 
         //returns empty string on success, error string on failure
         public string Initialize(WhichData controller)
@@ -340,6 +410,17 @@ namespace WhichData
 
         public void Update()
         {
+            //process queued data moves
+            //TODOJEFFGIFFEN possibly coroutine
+            if (m_dataMoves.Count() > 0)
+            {
+                //wait for all moves to complete
+                m_dataMoves.RemoveAll(dm => dm.IsComplete());
+
+                //when all complete, throw event
+                if ( m_dataMoves.Count == 0) {m_scienceEventOccured = true;}
+            }
+
             m_flags.Clear(); //clear all dirty flags to false
 
             if (m_partEventOccured) { ScanParts(); }

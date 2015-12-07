@@ -223,15 +223,17 @@ namespace WhichData
         //  toggle pushes on unlocked
         //  list picks
         //  info button pushes        
+        bool m_moveEnabled = false;
+        bool m_labEnabled = false;
+        bool m_transEnabled = false;
 
-
-        enum State 
+        public enum State 
         {
             Daemon, //the default.  Invisibly listening for orig dialog to prompt and events
             Alive,  //daemon mode + drawing our new GUI, lisetning for button pushes
             Picker  //daemon mode + asking for a destination part pick via message and highlights, listening for clicks.
         };
-        State m_state = State.Daemon;
+        public State m_state = State.Alive;
         ScreenMessage m_scrnMsg = null;
 
         public void Update()
@@ -252,180 +254,172 @@ namespace WhichData
             m_shipModel.Update();
 
             ShipModel.Flags flags = m_shipModel.dirtyFlags;
-            //ok so you know what changed on ship.  controller should populate GUI
-            if (flags.scienceDatasDirty)
+
+            //picking
+            if ( m_state == State.Picker)
             {
-                Debug.Log("GA rebuild controller pages");
-                m_dataPages.Clear();
-                m_selectedPages.Clear();
-                //HACKJEFFGIFFEN the selected need preserved across this
-                m_shipModel.m_scienceDatas.ForEach(sciData => m_dataPages.Add(new DataPage(sciData, m_shipModel)));
-                m_dirtyPages = true; //new pages means we need to resort
+                bool endPicking = false;
+                Vector3 screenClick = Vector3.zero;
+
+                //TODOJEFFGIFFEN could be less safe here
+                //if what we're to send, or where we're to send it, chnage - bail
+                if ( flags.scienceDatasDirty || flags.sciDataModulesDirty )
+                {
+                    endPicking = true;
+                }
+                else if ( m_GUIView.HaveClicked( 0, out screenClick) )
+                {
+                    //if user clicked, picking ends either way
+                    endPicking = true;
+
+                    //miss means cancel
+                    Part dstPart;
+                    if (m_shipModel.HaveClickedPart(screenClick, out dstPart))
+                    {
+                        //TODOJEFFGIFFEN should be in model update
+                        //non-container means cancel too
+                        ModuleScienceContainer dst;
+                        if (m_shipModel.IsPartSciContainer(dstPart, out dst))
+                        {
+                            //success - we have a dst sci container.
+                            IScienceDataContainer dstCont = dst as IScienceDataContainer;
+
+                            //partial selection: select src != dst (src == dst is effectively no-ops)
+                            List<DataPage> moveablePages = m_selectedPages.FindAll(pg => pg.m_dataModule != dstCont);
+                            List<ScienceData> moveableSciDatas = moveablePages.ConvertAll(pg => pg.m_scienceData);
+
+                            //partial selection: discard repeats wrt container
+                            if (!dst.allowRepeatedSubjects) { moveableSciDatas.RemoveAll(sd => dst.HasData(sd)); }
+
+                            m_shipModel.ProcessMoveDatas(dst, moveableSciDatas);
+
+                            m_selectedPages.Clear(); //delayed clear
+                        }
+                    }
+                }
+
+                //regardless of how we end, cleanup picking mode
+                if (endPicking)
+                {
+                    m_shipModel.UnhighlightContainers();
+                    //TODOJEFFGIFFEN put in view
+                    ScreenMessages.RemoveMessage(m_scrnMsg);
+                    m_scrnMsg = null;
+
+                    m_state = State.Alive;
+                }
             }
 
-            //view will propogate info
-            m_GUIView.Update();
-
-            //remainder is calc & push data, if there is any
-            if (m_dataPages.Count > 0)
+            //dialog alive.  note deliberately not an else - we want to catch if a dirty model cancelled picking
+            if (m_state == State.Alive)
             {
-                //get selection from view    
-                if (m_GUIView.m_dirtySelection)
+                //ok so you know what changed on ship.  controller should populate GUI
+                if (flags.scienceDatasDirty)
                 {
-                    Debug.Log("GA rebuild controller selection");
-                    //keep selected DataPage list
+                    Debug.Log("GA rebuild controller pages");
+                    m_dataPages.Clear();
                     m_selectedPages.Clear();
-                    m_GUIView.m_selectedPages.ForEach(pg => m_selectedPages.Add(pg.m_src));
-
-                    //newly selected means updating the view info
-                    int resetable = m_selectedPages.FindAll(pg => pg.m_dataModule is ModuleScienceExperiment).Count; //number of selected that are resettable
-                    int labableCount = m_selectedPages.FindAll(pg => pg.m_labPts > 0).Count; //number of selected that could lab copy
-
-                    bool moveable = (m_shipModel.m_containerModules.Count > 0 && resetable > 0); //experi result -> pod data
-                    moveable |= (m_shipModel.m_containerModules.Count > 1 && m_GUIView.m_selectedPages.Count - resetable > 0); //pod1 data -> pod2 data
-                    bool labable = m_shipModel.m_labModules.Count > 0 && labableCount > 0; //need lab & needs to be unique to said lab
-                    bool transable = m_shipModel.m_radioModules.Count > 0; //need a radio
-
-                    m_GUIView.SetViewInfo(moveable, labable, transable);
+                    //HACKJEFFGIFFEN the selected need preserved across this
+                    m_shipModel.m_scienceDatas.ForEach(sciData => m_dataPages.Add(new DataPage(sciData, m_shipModel)));
+                    m_dirtyPages = true; //new pages means we need to resort
                 }
 
-//HACKJEFFGIFFEN case State.Alive:
-//              {
+                //view will propogate info
+                m_GUIView.Update();
 
-                //TODOJEFFGIFFEN
-                //buttons should context sensitive - number of experi they apply to displayed like X / All.
-                //move button imagery:
-                //  onboard should be folder arrow capsule //thought, science symbol instead?
-                //  eva get should be folder arrow kerb
-                //  eva put should be folder arrow capsule
-                //buttons should either be live or ghosted, NEVER gone, NEVER move.
-
-                //action button handling
-                //all removers of pages & selections
-                if (m_GUIView.closeBtn)
+                //remainder is calc & push data, if there is any
+                if (m_dataPages.Count > 0)
                 {
-                    //TODOJEFFGIFFEN need actual close & open ;-)
-                    Debug.Log("GA close btn pushed");
-                    //m_selectedPages.Clear();
-                    //m_dirtySelection = true;
-
-                    //TODOJEFFGIFFEN move this clear to view
-                    //m_closeBtn = false; //clear the button click; stays on forever with no UI pump after this frame
-                }
-
-                //TODOJEFFGIFFEN should use reset on showReset bool
-                if (m_GUIView.discardBtn)
-                {
-                    List<ScienceData> discardDatas = m_selectedPages.Select(pg => pg.m_scienceData).ToList();
-                    m_shipModel.DiscardScienceDatas(discardDatas);
-                    //TODOJEFFGIFFEN move this clear to view
-                    //m_discardBtn = false;
-                }
-
-                //move btn
-/*              if (m_GUIView.moveBtn)
-                {   //HACKJEFFGIFFEN the pushed & enabled states need the'this frame' filter down, like the selection
-                    if (m_moveBtnEnabled)
+                    //get selection from view    
+                    if (m_GUIView.m_dirtySelection)
                     {
-                        m_state = State.Picker;
+                        Debug.Log("GA rebuild controller selection");
+                        //keep selected DataPage list
+                        m_selectedPages.Clear();
+                        m_GUIView.m_selectedPages.ForEach(pg => m_selectedPages.Add(pg.m_src));
 
-                        m_scrnMsg = ScreenMessages.PostScreenMessage("Choose where to move Data, [Esc] to cancel", 3600.0f, ScreenMessageStyle.UPPER_CENTER); //one hour, then screw it
+                        //newly selected means updating the view info
+                        int resetable = m_selectedPages.FindAll(pg => pg.m_dataModule is ModuleScienceExperiment).Count; //number of selected that are resettable
+                        int labableCount = m_selectedPages.FindAll(pg => pg.m_labPts > 0).Count; //number of selected that could lab copy
 
-                        //HACKJEFFGIFFEN repeat of far below
-                        List<ModuleScienceContainer> containerParts = FlightGlobals.ActiveVessel.FindPartModulesImplementing<ModuleScienceContainer>();
+                        m_moveEnabled = (m_shipModel.m_containerModules.Count > 0 && resetable > 0); //experi result -> pod data
+                        m_moveEnabled |= (m_shipModel.m_containerModules.Count > 1 && m_GUIView.m_selectedPages.Count - resetable > 0); //pod1 data -> pod2 data
+                        m_labEnabled = m_shipModel.m_labModules.Count > 0 && labableCount > 0; //need lab & needs to be unique to said lab
+                        m_transEnabled = m_shipModel.m_radioModules.Count > 0; //need a radio
 
-                        containerParts.ForEach(sciCan => HighlightPart(sciCan.part, Color.cyan));
-
-                        m_moveBtn = false;
+                        m_GUIView.SetViewInfo(m_moveEnabled, m_labEnabled, m_transEnabled);
                     }
-                    //TODOJEFFGIFFEN force ghosted
-                }
-*/
-                //lab button
-                //HACKJEFFGIFFEN
-                //i think 1st is only lab that matters.  a docking of 2 together only works the 1st in the tree.
-                //true == CAN copy
-                //ModuleScienceLab.IsLabData( FlightGlobals.ActiveVessel, pg.m_kspPage.pageData ).ToString();
-                if (m_GUIView.labBtn)
-                {
-//HACKJEFFGIFFEN                    if (m_labBtnEnabled)
+
+                    //HACKJEFFGIFFEN case State.Alive:
+                    //              {
+
+                    //TODOJEFFGIFFEN
+                    //buttons should context sensitive - number of experi they apply to displayed like X / All.
+                    //move button imagery:
+                    //  onboard should be folder arrow capsule //thought, science symbol instead?
+                    //  eva get should be folder arrow kerb
+                    //  eva put should be folder arrow capsule
+                    //buttons should either be live or ghosted, NEVER gone, NEVER move.
+
+                    //action button handling
+                    //all removers of pages & selections
+                    if (m_GUIView.closeBtn)
+                    {
+                        //TODOJEFFGIFFEN need actual close & open ;-)
+                        Debug.Log("GA close btn pushed");
+                        //m_selectedPages.Clear();
+                        //m_dirtySelection = true;
+
+                        //TODOJEFFGIFFEN move this clear to view
+                        //m_closeBtn = false; //clear the button click; stays on forever with no UI pump after this frame
+                    }
+
+                    //TODOJEFFGIFFEN should use reset on showReset bool
+                    if (m_GUIView.discardBtn)
+                    {
+                        List<ScienceData> discardDatas = m_selectedPages.ConvertAll(pg => pg.m_scienceData);
+                        m_shipModel.DiscardScienceDatas(discardDatas);
+                        //TODOJEFFGIFFEN move this clear to view
+                        //m_discardBtn = false;
+                    }
+
+                    //move btn
+                    if (m_GUIView.moveBtn && m_moveEnabled)
+                    {
+                        Debug.Log("GA control movebtn down");
+                        m_state = State.Picker;
+                        m_shipModel.HighlightContainers(Color.cyan);
+                        //TODOJEFFGIFFEN move to view
+                        m_scrnMsg = ScreenMessages.PostScreenMessage("Choose where to move Data, click away to cancel", 3600.0f, ScreenMessageStyle.UPPER_CENTER); //one hour, then screw it
+                    }
+
+                    //lab button
+                    //i think 1st is only lab that matters.  a docking of 2 together only works the 1st in the tree.
+                    if (m_GUIView.labBtn && m_labEnabled)
                     {
                         //partial selection - reduce selection to labable datas
                         List<DataPage> labablePages = m_selectedPages.FindAll(pg => pg.m_labPts > 0f);
                         m_shipModel.ProcessLabDatas(labablePages);
-                        
-//HACKJEFFGIFFEN                        m_labBtn = false;
                     }
-                    //TODOJEFFGIFFEN force ghosted
-                }
 
-                if (m_GUIView.transmitBtn)
-                {
-//HACKJEFFGIFFEN                    if (m_transmitBtnEnabled)
+                    if (m_GUIView.transmitBtn && m_transEnabled)
                     {
                         //TODOJEFFGIFFEN what happens on a transmit cut from power?
                         //TODOJEFFGIFFEN what happens in remotetech?
-                        List<ScienceData> transmitDatas = m_selectedPages.Select(pg => pg.m_scienceData).ToList();
+                        List<ScienceData> transmitDatas = m_selectedPages.ConvertAll(pg => pg.m_scienceData);
                         m_shipModel.ProcessTransmitDatas(transmitDatas);
-
-//HACKJEFFGIFFEN                        m_transmitBtn = false;
                     }
-                    //TODOJEFFGIFFEN force ghosted
-                }
 
-//HACKJEFFGIFFEN break;
-            }
+                } //m_dataPages.Count > 0
+
+            } //m_state == State.Alive
+
         }
 
         public void LaunchCoroutine( IEnumerator routine ) { StartCoroutine(routine); }
 
             //HACKJEFFGIFFEN old below
-            /*            switch (m_state)
-                        {
-                            case State.Picker:
-                            {
-                                bool endPicking = false;
-                                //HACKJEFFGIFFEN repeat of far below
-                                List<ModuleScienceContainer> containerParts = FlightGlobals.ActiveVessel.FindPartModulesImplementing<ModuleScienceContainer>();
-
-                                if (Input.GetMouseButtonDown(0))
-                                {
-                                    Ray clickRay = Camera.main.ScreenPointToRay(Input.mousePosition);
-                                    RaycastHit hit;
-                                    bool strike = Physics.Raycast(clickRay, out hit, 1000.0f, 1 << 0); //1km length.  Note ship parts are on layer 0, mask needs to be 1<<layer desired
-                                    if (strike)
-                                    {
-                                        Part clickedPart = hit.collider.gameObject.GetComponentInParent<Part>(); //the collider's gameobject is child to partmodule's gameobject
-
-                                        //if a science container was clicked
-                                        if ( containerParts.Exists(sciCont => sciCont.part == clickedPart) )
-                                        {
-                                            //ProcessMoveData needs to know clickedPart to skip src==dst selections
-                                            //capture in a lambda, pass that instead ;-)
-                                           Func<DataPage, bool> delgt = (DataPage page) => {return ProcessMoveData(page, clickedPart); };
-                                            ReverseProcessSelected(delgt);
-
-                                            endPicking = true;
-                                        }
-                                    }
-                                }
-
-                                if (endPicking || Input.GetKey(KeyCode.Escape))
-                                {
-                                    containerParts.ForEach(sciCont => UnHighlightPart(sciCont.part));
-                                    ScreenMessages.RemoveMessage(m_scrnMsg);
-                                    m_scrnMsg = null;
-
-                                    m_state = State.Alive; //daemon poll below will go to daemon if nothing left
-                                }
-                                break;
-                            }
-                            
-                            default: break;
-                        }
-
-
-
+/*
                         //now that we've removed all we need, add new pages
                         //when dialog is spawned, steal its data and kill it
                         if (ExperimentsResultDialog.Instance != null)
@@ -498,76 +492,7 @@ namespace WhichData
                                         m_dirtyPages = false;
                                     }
                                 }
-
-
-        //return whether to delete from m_selectedPages
-        //HACKJEFFGIFFEN
-                public bool ProcessDiscardData(DataPage page) { page.m_kspPage.OnDiscardData(page.m_kspPage.pageData); return true; } //always delete cause always succeed
-                public bool ProcessTransmitData(DataPage page)
-                {
-                    //HACKJEFFGIFFEN
-                    //page.m_kspPage.OnTransmitData(page.m_kspPage.pageData); return true; } //always delete cause always succeed
-                    List<ModuleDataTransmitter> radios = FlightGlobals.ActiveVessel.FindPartModulesImplementing<ModuleDataTransmitter>();
-                    List<ScienceData> dataList = new List<ScienceData>();
-                    dataList.Add( page.m_kspPage.pageData);
-                    radios[0].TransmitData( dataList );
-                    return true;
-                }
-                public void DonePrint(ScienceData dat) { Debug.Log("GA DonePrint: " + dat.subjectID); }
-                public bool ProcessLabData(DataPage page)
-                {
-                    bool labbed = false;
-                    //partial selection can happen for lab copies
-                    if (page.m_kspPage.showLabOption)
-                    {
-                        //HACKJEFFGIFFEN
-                        //try { page.m_kspPage.OnSendToLab(page.m_kspPage.pageData); }
-                        //catch { } //the callback tries to dismiss the murdered ExperimentsResultDialog here, can't do much but catch.
-                        List<ModuleScienceLab> labs = FlightGlobals.ActiveVessel.FindPartModulesImplementing<ModuleScienceLab>();
-                        StartCoroutine( labs[0].ProcessData( page.m_kspPage.pageData, DonePrint ) );
-
-                        labbed = true;
-                    }
-
-                    return labbed;
-                }
-                public bool ProcessMoveData(DataPage page, Part dstPart)
-                {
-                    bool moved = false;
-                    //a partial selection can contain src==dst selectees, skip em
-                    if (page.m_kspPage.host != dstPart)
-                    {
-                        ScienceData sciData = page.m_scienceData;
-                        //all destinations will have ModuleScienceContainer modules (dst cannot be experi)
-                        ModuleScienceContainer dstCont = dstPart.GetComponent<ModuleScienceContainer>();
-
-                        //when container disallows repeats, check for uniqueness
-                        if (dstCont.allowRepeatedSubjects || !dstCont.HasData(sciData))
-                        {
-                            page.m_dataModule.DumpData(sciData);
-                            dstCont.AddData(sciData);
-                            dstCont.ReviewDataItem(sciData); //create new entry to replace the old //HACKJEFFGIFFEN maybe part scan catches?
-                            moved = true;
-                        }
-                    }
-
-                    return moved;
-                }
-
-        public void ReverseProcessSelected(Func<DataPage, bool> processDataDlgt)
-        {
-            for (int i = m_selectedPages.Count - 1; i >= 0; i--)
-            {
-                DataPage page = m_selectedPages[i];
-                if (processDataDlgt(page))
-                {
-                    m_dataPages.RemoveAt(page.m_index);
-                    m_selectedPages.RemoveAt(i);  //and that's why we're removing selectees backwards
-                }
-            }
-            m_dirtyPages = true; //removed some, need to re-index remaining
-            m_dirtySelection = true; //need to default select, and update info pane
-        }
+                                
 */        
         public void OnDisable()
         {

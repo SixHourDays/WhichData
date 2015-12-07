@@ -188,17 +188,40 @@ namespace WhichData
             return errorMsg;
         }
 
+        public bool HaveClicked(int buttonIndex, out Vector3 screenClickPos)
+        {
+            //Vector3 is struct
+            screenClickPos = Vector3.zero;
+
+            if (Input.GetMouseButtonDown(buttonIndex))
+            {
+                screenClickPos = Input.mousePosition;
+                return true;
+            }
+
+            return false;
+        }
+
         //HACKJEFFGIFFEN
         public List<ViewPage> m_viewPages = new List<ViewPage>();
         public bool m_dirtySelection = false;
         public List<ViewPage> m_selectedPages = new List<ViewPage>();
         public void OnGUI()
         {
-            if (m_showUI && m_viewPages.Count > 0)
+            if (m_showUI && m_viewPages.Count > 0 && m_controller.m_state == WhichData.State.Alive)
             {
                 int uid = GUIUtility.GetControlID(FocusType.Passive); //get a nice unique window id from system
                 GUI.skin = m_dlgSkin;
                 m_window = GUI.Window(uid, m_window, WindowLayout, "", HighLogic.Skin.window); //style
+            }
+            else
+            {
+                //manually set buttons up, when GUI code wont run to do so
+                m_infoPane.closeBtn = false;
+                m_infoPane.discardBtn = false;
+                m_infoPane.moveBtn = false;
+                m_infoPane.labBtn = false;
+                m_infoPane.transmitBtn = false;
             }
         }
 
@@ -532,11 +555,11 @@ namespace WhichData
                 discardBtn = GUILayout.Button("", m_styleDiscardButton);
                 Color oldColor = GUI.color;
                 GUI.color = m_moveBtnEnabled ? Color.white : Color.grey; //HACKJEFFGIFFEN crap, need a state
-                moveBtn = GUILayout.Button("", m_moveBtnStyle);
+                moveBtn = GUILayout.Button("", m_moveBtnStyle) && m_moveBtnEnabled;
                 GUI.color = m_labBtnEnabled ? Color.white : Color.grey; //HACKJEFFGIFFEN crap, need a state
-                labBtn = GUILayout.Button(m_labBtnData, m_styleLabButton);
+                labBtn = GUILayout.Button(m_labBtnData, m_styleLabButton) && m_labBtnEnabled;
                 GUI.color = m_transBtnEnabled ? Color.white : Color.grey; //HACKJEFFGIFFEN crap, need a state
-                transmitBtn = GUILayout.Button(m_transBtnPerc, m_styleTransmitButton);
+                transmitBtn = GUILayout.Button(m_transBtnPerc, m_styleTransmitButton) && m_transBtnEnabled;
                 GUI.color = oldColor;
             }
             GUILayout.EndVertical();
