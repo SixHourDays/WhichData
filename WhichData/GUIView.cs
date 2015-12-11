@@ -206,6 +206,7 @@ namespace WhichData
         public List<ViewPage> m_viewPages = new List<ViewPage>();
         public bool m_dirtySelection = false;
         public List<ViewPage> m_selectedPages = new List<ViewPage>();
+        public List<DataPage> selectedPages => m_selectedPages.ConvertAll(vp => vp.m_src);
         public void OnGUI()
         {
             if (m_showUI && m_viewPages.Count > 0 && m_controller.m_state == WhichData.State.Alive)
@@ -337,7 +338,7 @@ namespace WhichData
                 m_viewPages.Clear();
                 m_selectedPages.Clear();
 
-                m_controller.m_dataPages.ForEach(page => m_viewPages.Add(new ViewPage(page)));
+                m_controller.scienceDatas.ForEach(sd => m_viewPages.Add(new ViewPage(sd)));
 
                 //rebuild indices
                 int i = 0;

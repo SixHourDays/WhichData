@@ -7,6 +7,105 @@ using UnityEngine;
 
 namespace WhichData
 {
+    public class DataPage : IEquatable<DataPage>
+    {
+        public ScienceData m_scienceData;
+        public ScienceSubject m_subject;
+        public IScienceDataContainer m_dataModule;
+
+        public float m_fullValue;
+        public float m_nextFullValue;
+        public float m_transmitValue;
+        public float m_nextTransmitValue;
+        public bool m_trnsWarnEnabled;
+        public float m_labPts;
+
+        //subjectID parsed
+        public string m_experi;
+        public string m_body;
+        public string m_situ;
+        public string m_biome;
+
+        public bool Equals(DataPage other)
+        {
+            if (ReferenceEquals(this, null)) { return false; }
+            if (ReferenceEquals(this, other)) { return true; }
+
+            return m_scienceData == other.m_scienceData //ref compares for ksp data is ok
+                && m_subject == other.m_subject
+                && m_dataModule == other.m_dataModule
+                && m_fullValue == other.m_fullValue     //the next & transmit values all base off this
+                && m_labPts == other.m_labPts;          //represent the content of the labs
+        }
+
+        public DataPage(IScienceDataContainer dataModule, ScienceData sciData, ShipModel shipModel)
+        {
+            m_scienceData = sciData;
+            m_subject = ResearchAndDevelopment.GetSubjectByID(m_scienceData.subjectID);
+            //ModuleScienceContainer and ModuleScienceExperiment subclass this
+            m_dataModule = dataModule;
+
+            //compose data used in row display
+            //displayed science in KSP is always 2x the values used in bgr
+            m_fullValue = ResearchAndDevelopment.GetScienceValue(m_scienceData.dataAmount, m_subject, 1.0f);
+            m_nextFullValue = ResearchAndDevelopment.GetNextScienceValue(m_scienceData.dataAmount, m_subject, 1.0f);
+            m_transmitValue = ResearchAndDevelopment.GetScienceValue(m_scienceData.dataAmount, m_subject, m_scienceData.transmitValue);
+            m_nextTransmitValue = ResearchAndDevelopment.GetNextScienceValue(m_scienceData.dataAmount, m_subject, m_scienceData.transmitValue);
+            m_trnsWarnEnabled = (m_dataModule is ModuleScienceExperiment) && !((ModuleScienceExperiment)m_dataModule).IsRerunnable();
+            m_labPts = shipModel.GetLabResearchPoints(sciData);
+
+            //parse out subjectIDs of the form (we ditch the @):
+            //  crewReport@KerbinSrfLandedLaunchPad
+            m_experi = m_body = m_situ = m_biome = string.Empty;
+
+            //experiment
+            string[] strings = m_scienceData.subjectID.Split('@');
+            m_experi = strings[0];                                                  // crewReport
+
+            //body
+            string subject = strings[1];
+            List<CelestialBody> bodies = FlightGlobals.Bodies;
+            foreach (CelestialBody body in bodies)
+            {
+                if (subject.StartsWith(body.name))                                  // Kerbin
+                {
+                    m_body = body.name;
+                    subject = subject.Substring(body.name.Length);
+                    break;
+                }
+            }
+            if (m_body == string.Empty)
+            {
+                Debug.Log("GA ERROR no body in id " + m_scienceData.subjectID);
+            }
+
+            //situation
+            List<string> situations = ResearchAndDevelopment.GetSituationTags();
+            foreach (string situ in situations)
+            {
+                if (subject.StartsWith(situ))                                       // SrfLanded
+                {
+                    m_situ = situ;
+                    subject = subject.Substring(situ.Length);
+                    break;
+                }
+            }
+            if (m_situ == string.Empty)
+            {
+                Debug.Log("GA ERROR no situ in id " + m_scienceData.subjectID);
+            }
+
+            //biome
+            //when a situation treats experiment as global, no biome name is appended, and subject will now be string.empty
+            if (subject != string.Empty)
+            {
+                //TODOJEFFGIFFEN can't find a complete list of them programmatically,
+                //R&D doesnt return "R&D" or "Flag Pole" etc
+                m_biome = subject;                                                      //LaunchPad
+            }
+        }
+    }
+
     public class ShipModel
     {
         //wrt this frame
@@ -25,7 +124,7 @@ namespace WhichData
         //CollectDataExternalEvent
         //ReviewDataEvent
         //StoreDataExternalEvent
-        
+
         public void OnAwake()
         {
             //register for events
@@ -74,21 +173,21 @@ namespace WhichData
         private Flags m_flags = new Flags();
         public Flags dirtyFlags { get { return m_flags; } } //get-only property
 
+
         //ship pieces
         //HACKJEFFGIFFEN accessors better, plus setting involves work
         public List<IScienceDataContainer> m_sciDataModules = new List<IScienceDataContainer>();
-        public Dictionary<ScienceData, IScienceDataContainer> m_sciDataParts = new Dictionary<ScienceData, IScienceDataContainer>();
-        
+
         //sciDataModules split into experiments and containers
         public List<ModuleScienceExperiment> m_experiModules = new List<ModuleScienceExperiment>();
         public List<ModuleScienceContainer> m_containerModules = new List<ModuleScienceContainer>();
-        
+
         //labs and radios
         public List<ModuleScienceLab> m_labModules = new List<ModuleScienceLab>();
-        public List<IScienceDataTransmitter> m_radioModules = new List<IScienceDataTransmitter>();
+        public List<ModuleDataTransmitter> m_radioModules = new List<ModuleDataTransmitter>();
 
-        //ship ScienceData flattened
-        public List<ScienceData> m_scienceDatas = new List<ScienceData>();
+        //ship ScienceData flattened, inside a metadata class
+        public List<DataPage> m_scienceDatas = new List<DataPage>();
         //ship lab research subjects flattened
         public List<string> m_researchIDs = new List<string>();
 
@@ -119,7 +218,7 @@ namespace WhichData
             }
 
             //check radios
-            List<IScienceDataTransmitter> radioModules = FlightGlobals.ActiveVessel.FindPartModulesImplementing<IScienceDataTransmitter>();
+            List<ModuleDataTransmitter> radioModules = FlightGlobals.ActiveVessel.FindPartModulesImplementing<ModuleDataTransmitter>();
             if (!radioModules.SequenceEqual(m_radioModules))
             {
                 m_flags.radioModulesDirty = true;
@@ -132,31 +231,25 @@ namespace WhichData
             Debug.Log("GA ShipModel::ScanDatas");
             //check data
             //TODOJEFFGIFFEN this cooooould do partial updating based on changed containers...
-            List<ScienceData> scienceDatas = new List<ScienceData>();
-            m_sciDataModules.ForEach(sdm => scienceDatas.AddRange(sdm.GetData()));
-            if (!scienceDatas.SequenceEqual(m_scienceDatas))
+            List<DataPage> scienceDatas = new List<DataPage>();
+            foreach (IScienceDataContainer cont in m_sciDataModules)
+            {
+                foreach (ScienceData sd in cont.GetData())
+                {
+                    scienceDatas.Add(new DataPage(cont, sd, this));
+                }
+            }
+
+            if (!scienceDatas.SequenceEqual(m_scienceDatas)) //will rely on DataPage::Equals
             {
                 m_flags.scienceDatasDirty = true;
                 m_scienceDatas = scienceDatas;
-
-                //rebuild data->part map
-                m_sciDataParts.Clear();
-                foreach (IScienceDataContainer part in m_sciDataModules)
-                {   //HACKJEFFGIFFEN do faster later
-                    ScienceData[] datas = part.GetData();
-                    foreach ( ScienceData data in datas )
-                    {
-                        Debug.Log("GA dict add " + data.subjectID + " " + part.ToString());
-                        m_sciDataParts.Add(data, part);
-                    }
-
-                }
             }
 
             //the labs researched subjects alter the worth of the science datas
             List<string> researchIDs = new List<string>();
             m_labModules.ForEach(lab => researchIDs.AddRange(lab.ExperimentData));
-            if ( !researchIDs.SequenceEqual(m_researchIDs))
+            if (!researchIDs.SequenceEqual(m_researchIDs))
             {
                 m_flags.scienceDatasDirty = true;
                 m_researchIDs = researchIDs;
@@ -176,14 +269,87 @@ namespace WhichData
 
         WhichData m_controller;
 
-        public void DiscardScienceDatas(List<ScienceData> discards)
+
+        class DataProcessor
+        {
+            List<DataPage> m_queue = new List<DataPage>();
+            Action<DataPage> m_step1;
+            Func<DataPage, bool> m_poll2;
+            Action<DataPage> m_step3;
+            Action m_end4;
+
+            bool m_polling = false;
+
+            public DataProcessor(Action<DataPage> step1, Func<DataPage, bool> poll2, Action<DataPage> step3, Action end)
+            {
+                m_step1 = step1;
+                m_poll2 = poll2;
+                m_step3 = step3;
+                m_end4 = end;
+            }
+
+            public void Process(List<DataPage> datas)
+            {
+                m_queue.AddRange(datas);
+            }
+
+            public void Update()
+            {
+                while (m_queue.Count > 0)
+                {
+                    DataPage dp = m_queue.First();
+
+                    //step1 called once
+                    if (!m_polling)
+                    {
+                        if (m_step1 != null) { m_step1(dp); }
+
+                        m_polling = true;
+                    }
+                    //poll2 spins
+                    else if (!m_poll2(dp))
+                    {
+                        return;
+                    }
+                    //step3 called once, and we loop
+                    else
+                    {
+                        m_polling = false;
+
+                        if (m_step3 != null) { m_step3(dp); }
+
+                        m_queue.RemoveAt(0);
+
+                        //step4 if we've finished the queue
+                        if (m_queue.Count == 0 && m_end4 != null) { m_end4(); }
+                    }
+                }
+            }
+        }
+
+        //async discard 
+        DataProcessor m_discardDataQueue;
+        public void ProcessDiscardDatas(List<DataPage> discards)
         {
             //remove data from parts
-            Debug.Log("GA model discarding " + discards.Count);
-            discards.ForEach( sd => m_sciDataParts[sd].DumpData(sd) );
+            //move step 1:
+            //do this here to remove n data in 1 frame (using the DataProcessor hooks it would take n frames)
+            discards.ForEach(dp => dp.m_dataModule.DumpData( dp.m_scienceData ));
 
-            m_scienceEventOccured = true;
+            m_discardDataQueue.Process( discards );
         }
+        //poll2
+        bool DiscardPoll(DataPage dp)
+        {
+            return !dp.m_dataModule.GetData().Contains(dp.m_scienceData);
+        }
+        //step3
+        void DiscardPost(DataPage dp)
+        {   //HACKJEFFGIFFEN
+            Debug.Log("GA model discarded " + dp.m_scienceData.subjectID);
+        }
+        //end of queue
+        void FireScienceEvent() { m_scienceEventOccured = true; }
 
 
         void HighlightPart(Part part, Color color)
@@ -236,9 +402,10 @@ namespace WhichData
             if (strike)
             {
                 clickedPart = hit.collider.gameObject.GetComponentInParent<Part>(); //the collider's gameobject is child to partmodule's gameobject
+                return true;
             }
 
-            return clickedPart != null;
+            return false;
         }
 
         public bool IsPartSciContainer(Part part, out ModuleScienceContainer clickedContainer)
@@ -247,36 +414,34 @@ namespace WhichData
             return clickedContainer != null;
         }
 
-        public class DataMove
-        {
-            public ScienceData m_sciData;
-            public IScienceDataContainer m_src;
-            public ModuleScienceContainer m_dst;
-            public DataMove(ModuleScienceContainer dst, IScienceDataContainer src, ScienceData sd)
-            {
-                m_sciData = sd;
-                m_src = src;
-                m_dst = dst;
 
-                src.DumpData(sd); //begin the dump
-            }
-            public bool IsComplete()
-            {
-                if ( !m_src.GetData().Contains(m_sciData) ) //dump data seems to take 1 frame to complete so poll
-                {
-                    //once DumpData is done, AddData is instantaneous
-                    m_dst.AddData(m_sciData);
-                    return true;
-                }
-                return false;
-            }
+        //async move
+        DataProcessor m_moveDataQueue;
+        ModuleScienceContainer m_moveDst = null;
+        public void ProcessMoveDatas(ModuleScienceContainer dst, List<DataPage> sources)
+        {
+            m_moveDst = dst;
+
+            //move step 1:
+            //do this here to remove n data in 1 frame (using the DataProcessor hooks it would take n frames)
+            sources.ForEach(dp => dp.m_dataModule.DumpData(dp.m_scienceData));
+            m_moveDataQueue.Process(sources);
+        }
+        //step 2 is DiscardPoll
+        //step3
+        void MoveAdd(DataPage dp)
+        {
+            Debug.Log("GA model moved " + dp.m_scienceData.subjectID);
+            m_moveDst.AddData(dp.m_scienceData);
+        }
+        //end of queue
+        void MoveEnd()
+        {
+            m_moveDst = null;
+
+            FireScienceEvent();
         }
 
-        public List<DataMove> m_dataMoves = new List<DataMove>();
-        public void ProcessMoveDatas(ModuleScienceContainer dst, List<ScienceData> sources)
-        {
-            sources.ForEach(sd=> m_dataMoves.Add(new DataMove( dst, m_sciDataParts[sd], sd)));
-        }
 
         public float GetLabResearchPoints(ScienceData sciData)
         {
@@ -319,82 +484,68 @@ namespace WhichData
             return refValue * scalar * sciMultiplier;
         }
 
-        protected class ResearchDatum
+        DataProcessor m_labDataQueue;
+        public void ProcessLabDatas(List<DataPage> dataPages)
         {
-            public ScienceData scienceData;
-            public float researchPoints;
-            public ResearchDatum(DataPage d)
-            {
-                scienceData = d.m_scienceData;
-                researchPoints = d.m_labPts;
-            }
+            m_labDataQueue.Process(dataPages);
         }
-
-        protected List<ResearchDatum> m_labCopyQueue = new List<ResearchDatum>();
-        protected bool m_copying = false;
-
-        protected void FinishLabCopy( ScienceData finishedData )
-        {
-            m_copying = false;              //clear guard bool
-
-            ResearchDatum rd = m_labCopyQueue.First();
-            Debug.Log("GA model finish lab copy " + m_labCopyQueue.Count + " " + rd.scienceData.title);
-
-            //HACKJEFFGIFFEN the lab copy fails (missing the ExperiDlg), so we manually add the pts
-            m_labModules.First().dataStored += rd.researchPoints;
-            
-            m_labCopyQueue.RemoveAt(0);     //dequeue finished data
-            m_scienceEventOccured = true;   //the experiment will re-appeared in the container //TODOJEFFGIFFEN verify
-
-            //continue through queue
-            StartNextLabCopy();
-        }
-
-        protected void StartNextLabCopy()
+        bool m_labCopying = false;
+        //step1
+        void LabStartCopy(DataPage dp)
         {
             //TODOJEFFGIFFEN multiple labs concerns
             //TODOJEFFGIFFEN possible to leave scene overtop of processing long time...
-            if (!m_copying)
-            {
-                //HACKJEFFGIFFEN does..the lab fail after copy on data full?
-                if (m_labCopyQueue.Count > 0)
-                {
-                    m_copying = true;
-                    Debug.Log("GA model start lab copy " + m_labCopyQueue.Count + " " + m_labCopyQueue.First().scienceData.title);
-
-                    m_controller.LaunchCoroutine(
-                        m_labModules.First().ProcessData(m_labCopyQueue.First().scienceData, FinishLabCopy)
-                    );
-                }
-            }
+            Debug.Log("GA model start lab copy " + dp.m_scienceData.subjectID);
+            m_controller.LaunchCoroutine(
+                m_labModules.First().ProcessData(dp.m_scienceData, KSPLabEndCopy));
+            m_labCopying = true;
         }
-
-        public void ProcessLabDatas(List<DataPage> dataPages)
+        //poll2 & ksp callback
+        void KSPLabEndCopy(ScienceData sd) { m_labCopying = false; }
+        bool LabIsDone(DataPage dp) { return !m_labCopying; }
+        //step3
+        void LabPostCopy(DataPage dp)
         {
-            //queue up & run lab copy data
-            dataPages.ForEach(dp => m_labCopyQueue.Add(new ResearchDatum(dp)));
-            StartNextLabCopy();
+            Debug.Log("GA model finish lab copy " + dp.m_scienceData.subjectID);
 
-            //consider it queued in lab, so remove from parts
-            //TODOJEFFGIFFEN cant re-add to experi...so we leave it?
-            //dataPages.ForEach(dp => dp.m_dataModule.DumpData(dp.m_scienceData));
+            //HACKJEFFGIFFEN the lab copy fails (missing the ExperiDlg), so we manually add the pts
+            m_labModules.First().dataStored += dp.m_labPts;
 
             m_scienceEventOccured = true;
         }
+        //end queue - none
 
 
-        public void ProcessTransmitDatas(List<ScienceData> datas)
+        DataProcessor m_transmitDataQueue;
+        public void ProcessTransmitDatas(List<DataPage> datas)
         {
-            Debug.Log("GA model transmit:");
-            datas.ForEach(sd => Debug.Log(sd.subjectID));
+            m_transmitDataQueue.Process(datas);
+        }
+        bool m_transmitting = false;
+        //step1
+        void TransmitSend(DataPage dp)
+        {
             //TODOJEFFGIFFEN choosing radio
             //TODOJEFFGIFFEN kill during transmit concern
-            m_radioModules.First().TransmitData(datas);
-
-            //consider it queued in radio?, so remove from parts
-            datas.ForEach(sd => m_sciDataParts[sd].DumpData(sd));
-
-            m_scienceEventOccured = true;
+            Debug.Log("GA model start transmit " + dp.m_scienceData.subjectID);
+            m_radioModules.First().TransmitData(new List<ScienceData>() { dp.m_scienceData });
+            m_transmitting = true;
+            //the callback version doesnt submit science, fires at start of antenna fold down
+            //polling IsBusy switches at end of fold down
+            //so we temporarily subscribe to science recieve event as our poll2 step
+            GameEvents.OnScienceRecieved.Add(KSPOnScienceRcv);
+        }
+        //poll2 && ksp callback
+        void KSPOnScienceRcv(float sciEarned, ScienceSubject s, ProtoVessel p, bool b) { m_transmitting = false; } //unsure what b does
+        public bool TransmitIsSent(DataPage dp) { return !m_transmitting; }
+        //step3
+        public void TransmitDiscard(DataPage dp)
+        {
+            Debug.Log("GA model end transmit " + dp.m_scienceData.subjectID);
+            GameEvents.OnScienceRecieved.Remove(KSPOnScienceRcv);
+            //pass off the remove to discard queue
+            ProcessDiscardDatas(new List<DataPage>() { dp });
+            //no need to fire event, Discard will
         }
 
 
@@ -404,22 +555,22 @@ namespace WhichData
             string errorMsg = string.Empty;
 
             m_controller = controller;
+
+            m_discardDataQueue = new DataProcessor(null, DiscardPoll, DiscardPost, FireScienceEvent);
+            m_moveDataQueue = new DataProcessor(null, DiscardPoll, MoveAdd, MoveEnd);
+            m_labDataQueue = new DataProcessor(LabStartCopy, LabIsDone, LabPostCopy, null);
+            m_transmitDataQueue = new DataProcessor(TransmitSend, TransmitIsSent, TransmitDiscard, null);
+
             
             return errorMsg;
         }
 
         public void Update()
         {
-            //process queued data moves
-            //TODOJEFFGIFFEN possibly coroutine
-            if (m_dataMoves.Count() > 0)
-            {
-                //wait for all moves to complete
-                m_dataMoves.RemoveAll(dm => dm.IsComplete());
-
-                //when all complete, throw event
-                if ( m_dataMoves.Count == 0) {m_scienceEventOccured = true;}
-            }
+            m_discardDataQueue.Update();
+            m_moveDataQueue.Update();
+            m_labDataQueue.Update();
+            m_transmitDataQueue.Update();
 
             m_flags.Clear(); //clear all dirty flags to false
 

@@ -9,94 +9,6 @@ using System.Collections;
 
 namespace WhichData
 {
-    public class DataPage
-    {
-        //ksp data
-        public ScienceData m_scienceData;
-        public ScienceSubject m_subject;
-        public IScienceDataContainer m_dataModule;
-
-        public float m_fullValue;
-        public float m_nextFullValue;
-        public float m_transmitValue;
-        public float m_nextTransmitValue;
-        public bool m_trnsWarnEnabled;
-        public float m_labPts;
-
-        //subjectID parsed
-        public string m_experi;
-        public string m_body;
-        public string m_situ;
-        public string m_biome;
-
-        public DataPage(ScienceData sciData, ShipModel shipModel )
-        {
-            m_scienceData = sciData;
-            m_subject = ResearchAndDevelopment.GetSubjectByID(m_scienceData.subjectID);
-            //ModuleScienceContainer and ModuleScienceExperiment subclass this
-            m_dataModule = shipModel.m_sciDataParts[sciData];
-
-            //compose data used in row display
-            //displayed science in KSP is always 2x the values used in bgr
-            m_fullValue = ResearchAndDevelopment.GetScienceValue(m_scienceData.dataAmount, m_subject, 1.0f);
-            m_nextFullValue = ResearchAndDevelopment.GetNextScienceValue(m_scienceData.dataAmount, m_subject, 1.0f);
-            m_transmitValue = ResearchAndDevelopment.GetScienceValue(m_scienceData.dataAmount, m_subject, m_scienceData.transmitValue);
-            m_nextTransmitValue = ResearchAndDevelopment.GetNextScienceValue(m_scienceData.dataAmount, m_subject, m_scienceData.transmitValue);
-            m_trnsWarnEnabled = (m_dataModule is ModuleScienceExperiment) && !((ModuleScienceExperiment)m_dataModule).IsRerunnable();
-            m_labPts = shipModel.GetLabResearchPoints( sciData );
-
-            //parse out subjectIDs of the form (we ditch the @):
-            //  crewReport@KerbinSrfLandedLaunchPad
-            m_experi = m_body = m_situ = m_biome = string.Empty;
-
-            //experiment
-            string[] strings = m_scienceData.subjectID.Split('@');
-            m_experi = strings[0];                                                  // crewReport
-
-            //body
-            string subject = strings[1];
-            List<CelestialBody> bodies = FlightGlobals.Bodies;
-            foreach (CelestialBody body in bodies)
-            {
-                if (subject.StartsWith(body.name))                                  // Kerbin
-                {
-                    m_body = body.name;
-                    subject = subject.Substring(body.name.Length);
-                    break;
-                }
-            }
-            if (m_body == string.Empty)
-            {
-                Debug.Log("GA ERROR no body in id " + m_scienceData.subjectID);
-            }
-
-            //situation
-            List<string> situations = ResearchAndDevelopment.GetSituationTags();
-            foreach (string situ in situations)
-            {
-                if (subject.StartsWith(situ))                                       // SrfLanded
-                {
-                    m_situ = situ;
-                    subject = subject.Substring(situ.Length);
-                    break;
-                }
-            }
-            if (m_situ == string.Empty)
-            {
-                Debug.Log("GA ERROR no situ in id " + m_scienceData.subjectID);
-            }
-
-            //biome
-            //when a situation treats experiment as global, no biome name is appended, and subject will now be string.empty
-            if (subject != string.Empty)
-            {
-                //TODOJEFFGIFFEN can't find a complete list of them programmatically,
-                //R&D doesnt return "R&D" or "Flag Pole" etc
-                m_biome = subject;                                                      //LaunchPad
-            }
-        }
-    }
-
     public class SortField
     {
 
@@ -203,7 +115,7 @@ namespace WhichData
         };
 */
         public bool m_dirtyPages = false;
-        public List<DataPage> m_dataPages = new List<DataPage>();
+        public List<DataPage> scienceDatas => m_shipModel.m_scienceDatas;
         public List<DataPage> m_selectedPages = new List<DataPage>();
 //        public RankedSorter m_rankSorter = new RankedSorter();
 //      HACKJEFFGIFFEN
@@ -285,15 +197,13 @@ namespace WhichData
                             IScienceDataContainer dstCont = dst as IScienceDataContainer;
 
                             //partial selection: select src != dst (src == dst is effectively no-ops)
-                            List<DataPage> moveablePages = m_selectedPages.FindAll(pg => pg.m_dataModule != dstCont);
-                            List<ScienceData> moveableSciDatas = moveablePages.ConvertAll(pg => pg.m_scienceData);
-
+                            List<DataPage> moveablePages = m_selectedPages.FindAll(dp => dp.m_dataModule != dstCont);
                             //partial selection: discard repeats wrt container
-                            if (!dst.allowRepeatedSubjects) { moveableSciDatas.RemoveAll(sd => dst.HasData(sd)); }
+                            if (!dst.allowRepeatedSubjects) { moveablePages.RemoveAll(dp => dst.HasData(dp.m_scienceData)); }
 
-                            m_shipModel.ProcessMoveDatas(dst, moveableSciDatas);
+                            m_shipModel.ProcessMoveDatas(dst, moveablePages);
 
-                            m_selectedPages.Clear(); //delayed clear
+                            m_selectedPages.Clear();
                         }
                     }
                 }
@@ -317,10 +227,8 @@ namespace WhichData
                 if (flags.scienceDatasDirty)
                 {
                     Debug.Log("GA rebuild controller pages");
-                    m_dataPages.Clear();
                     m_selectedPages.Clear();
                     //HACKJEFFGIFFEN the selected need preserved across this
-                    m_shipModel.m_scienceDatas.ForEach(sciData => m_dataPages.Add(new DataPage(sciData, m_shipModel)));
                     m_dirtyPages = true; //new pages means we need to resort
                 }
 
@@ -328,15 +236,14 @@ namespace WhichData
                 m_GUIView.Update();
 
                 //remainder is calc & push data, if there is any
-                if (m_dataPages.Count > 0)
+                if (m_shipModel.m_scienceDatas.Count > 0)
                 {
                     //get selection from view    
                     if (m_GUIView.m_dirtySelection)
                     {
                         Debug.Log("GA rebuild controller selection");
                         //keep selected DataPage list
-                        m_selectedPages.Clear();
-                        m_GUIView.m_selectedPages.ForEach(pg => m_selectedPages.Add(pg.m_src));
+                        m_selectedPages = m_GUIView.selectedPages;
 
                         //newly selected means updating the view info
                         int resetable = m_selectedPages.FindAll(pg => pg.m_dataModule is ModuleScienceExperiment).Count; //number of selected that are resettable
@@ -377,8 +284,7 @@ namespace WhichData
                     //TODOJEFFGIFFEN should use reset on showReset bool
                     if (m_GUIView.discardBtn)
                     {
-                        List<ScienceData> discardDatas = m_selectedPages.ConvertAll(pg => pg.m_scienceData);
-                        m_shipModel.DiscardScienceDatas(discardDatas);
+                        m_shipModel.ProcessDiscardDatas(m_selectedPages);
                         //TODOJEFFGIFFEN move this clear to view
                         //m_discardBtn = false;
                     }
@@ -406,8 +312,7 @@ namespace WhichData
                     {
                         //TODOJEFFGIFFEN what happens on a transmit cut from power?
                         //TODOJEFFGIFFEN what happens in remotetech?
-                        List<ScienceData> transmitDatas = m_selectedPages.ConvertAll(pg => pg.m_scienceData);
-                        m_shipModel.ProcessTransmitDatas(transmitDatas);
+                        m_shipModel.ProcessTransmitDatas(m_selectedPages);
                     }
 
                 } //m_dataPages.Count > 0
