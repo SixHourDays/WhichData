@@ -28,6 +28,11 @@ move btn gains 2nd step: UI hide + destination mouse pick
 DataPage now implements IEquatable, so it will do value comparisons, which will catch identical scidata in different parts, etc
 Model now posses DataPages; maintains coherency in scans, eliminates the m_sciDataParts dictionary
 abstracted the work, wait on ksp, work loop into DataProcessors for each action (including all removedatas)
+integrated Compare<T> into SortField as a factory.  Takes a field accessor dlgt, builds the needed comparer dlgt, and news the SortField
+SortField gained a 3rd state for descending sorts.
+create sort toggles on list entries
+sort list with ranked toggling
+Added lab copy sort field.
 
 bugs:
 doing move has highlighted that flat sci list isnt enough:
@@ -48,12 +53,10 @@ update group text for when move / lab / radio is disabled
 preservation of selectees across model changes.
 listen for deployed to catch more science inserting to the dialog
 listen for reset to clear a data
-create sort toggles on list entries
-sort list with ranked toggling
 review data spawns my dialog instead
 reviewed / new data highlights
 listen for crew board/eva do alter the scientist clean right click menu
-more sorts: lab copy, container, 
+more sorts: container
 gather right-click for pod, when any exp has data in it
 clean right-click for pod, when any exp is spent & scientist is aboard
 eva get/StoreData trigger dialog

@@ -9,46 +9,6 @@ using System.Collections;
 
 namespace WhichData
 {
-    public class SortField
-    {
-
-        public string m_text;
-        public bool m_guiToggle;
-        public bool m_enabled;
-        public Func<DataPage, DataPage, int> m_sortDlgt;
-
-        public SortField(string title, Func<DataPage, DataPage, int> sortDlgt)
-        {
-            m_text = title;
-            m_sortDlgt = sortDlgt;
-
-            m_guiToggle = false; //actual HUD toggle
-            m_enabled = true; //toggle locking via ranks
-        }
-    }
-
-    public class RankedSorter : IComparer<DataPage>
-    {
-        private List<SortField> m_sortedFields = new List<SortField>(); //ranked SortFields to sort on
-        public SortField GetLastSortField() { return m_sortedFields.Last(); }
-        public int GetTotalRanks() { return m_sortedFields.Count; }
-        public void AddSortField(SortField sf) { m_sortedFields.Add(sf); }
-        public void RemoveLastSortField() { m_sortedFields.RemoveAt(m_sortedFields.Count - 1); }
-
-        public int Compare(DataPage x, DataPage y)
-        {
-            // -1 < , 0 == , 1 >
-            foreach (SortField sf in m_sortedFields)
-            {
-                int result = sf.m_sortDlgt(x, y);
-                if (result != 0) { return result; }
-            }
-
-            //if all criteria returned equal, let order of list remain
-            return 0;
-        }
-    }
-
     [KSPAddon(KSPAddon.Startup.Flight, false)] //simple enough we can just exist in flight, new instance / scene
     public class WhichData : MonoBehaviour
     {
@@ -92,40 +52,18 @@ namespace WhichData
 
         }
         
-        
-
-        
-
-
-//HACKJEFFGIFFEN
-        //generic comparer for a < b is -1, a == b is 0, a > b is 1
-/*        public static int Compare<T>(T x, T y) where T : IComparable { return x.CompareTo(y); }
-
-        //mod state
-        //sortfields, lambdas dictating member to compare on
-        public List<SortField> m_sortFields = new List<SortField>
-        {
-            new SortField("Part",           (x, y) => Compare(x.m_experi, y.m_experi)),
-            new SortField("Recover Sci",    (x, y) => Compare(x.m_kspPage.scienceValue, y.m_kspPage.scienceValue)), 
-            new SortField("Transm. Sci",    (x, y) => Compare(x.m_kspPage.transmitValue, y.m_kspPage.transmitValue)),
-            new SortField("Mits",           (x, y) => Compare(x.m_kspPage.dataSize, y.m_kspPage.dataSize)),
-            new SortField("Biome",          (x, y) => Compare(x.m_biome, y.m_biome)),
-            new SortField("Situation",      (x, y) => Compare(x.m_situ, y.m_situ)),
-            new SortField("Celes. Body",    (x, y) => Compare(x.m_body, y.m_body))
-        };
-*/
         public bool m_dirtyPages = false;
         public List<DataPage> scienceDatas => m_shipModel.m_scienceDatas;
         public List<DataPage> m_selectedPages = new List<DataPage>();
-//        public RankedSorter m_rankSorter = new RankedSorter();
+
 //      HACKJEFFGIFFEN
-        bool ready = false;
+        bool m_ready = false;
 
         public void OnGUI()
         {
            //HACKJEFFGIFFEN
            //if (m_state == State.Alive)
-            if ( ready )
+            if (m_ready)
             {
                 m_GUIView.OnGUI();
             }
@@ -146,11 +84,16 @@ namespace WhichData
             Picker  //daemon mode + asking for a destination part pick via message and highlights, listening for clicks.
         };
         public State m_state = State.Alive;
-        ScreenMessage m_scrnMsg = null;
 
         public void Update()
         {
-            if (!ready)
+            //keep the original ERD dead
+            if (ExperimentsResultDialog.Instance != null)
+            {   //this really should go in the model, but I need GameObject.Destroy
+                Destroy(ExperimentsResultDialog.Instance.gameObject); //dead next frame
+            }
+
+            if (!m_ready)
             {
                 while (ResearchAndDevelopment.Instance == null)
                 {
@@ -158,7 +101,7 @@ namespace WhichData
                 }
                 Debug.Log("GA unblocked by R&D, first Update");
 
-                ready = true;
+                m_ready = true;
             }
 
             m_dirtyPages = false;
@@ -212,9 +155,7 @@ namespace WhichData
                 if (endPicking)
                 {
                     m_shipModel.UnhighlightContainers();
-                    //TODOJEFFGIFFEN put in view
-                    ScreenMessages.RemoveMessage(m_scrnMsg);
-                    m_scrnMsg = null;
+                    m_GUIView.DisableScreenMessage();
 
                     m_state = State.Alive;
                 }
@@ -243,7 +184,7 @@ namespace WhichData
                     {
                         Debug.Log("GA rebuild controller selection");
                         //keep selected DataPage list
-                        m_selectedPages = m_GUIView.selectedPages;
+                        m_selectedPages = m_GUIView.selectedDataPages;
 
                         //newly selected means updating the view info
                         int resetable = m_selectedPages.FindAll(pg => pg.m_dataModule is ModuleScienceExperiment).Count; //number of selected that are resettable
@@ -285,8 +226,6 @@ namespace WhichData
                     if (m_GUIView.discardBtn)
                     {
                         m_shipModel.ProcessDiscardDatas(m_selectedPages);
-                        //TODOJEFFGIFFEN move this clear to view
-                        //m_discardBtn = false;
                     }
 
                     //move btn
@@ -295,8 +234,7 @@ namespace WhichData
                         Debug.Log("GA control movebtn down");
                         m_state = State.Picker;
                         m_shipModel.HighlightContainers(Color.cyan);
-                        //TODOJEFFGIFFEN move to view
-                        m_scrnMsg = ScreenMessages.PostScreenMessage("Choose where to move Data, click away to cancel", 3600.0f, ScreenMessageStyle.UPPER_CENTER); //one hour, then screw it
+                        m_GUIView.SetScreenMessage("Choose where to move Data, click away to cancel");
                     }
 
                     //lab button
@@ -308,6 +246,7 @@ namespace WhichData
                         m_shipModel.ProcessLabDatas(labablePages);
                     }
 
+                    //transmit button
                     if (m_GUIView.transmitBtn && m_transEnabled)
                     {
                         //TODOJEFFGIFFEN what happens on a transmit cut from power?
@@ -323,81 +262,12 @@ namespace WhichData
 
         public void LaunchCoroutine( IEnumerator routine ) { StartCoroutine(routine); }
 
-            //HACKJEFFGIFFEN old below
+        //HACKJEFFGIFFEN old below
 /*
-                        //now that we've removed all we need, add new pages
-                        //when dialog is spawned, steal its data and kill it
-                        if (ExperimentsResultDialog.Instance != null)
-                        {
-                            //HACKJEFFGIFFEN subsumed basically all this
-                            //get rid of original dialog
-                            Destroy(ExperimentsResultDialog.Instance.gameObject); //1 frame up still...ehh
-                        }
-                        if (m_state != State.Picker)
-                        {
-                            m_state = m_dataPages.Count > 0 ? State.Alive : State.Daemon;
-                        }
-
-
-
-                        switch (m_state)
-                        {
-                            case State.Picker:
-                            {
-                                break;
-                            }
-                            case State.Alive:
-                            {
-                                //m_dataPages now holds all we need this frame, update UI
-                                //list field sorting
-                                {
-                                    //toggle chain logic
-                                    //notion of sorting fwd/back seems nice, but unclear / annoying in practice
-                                    //cycling a chain of toggles means both nuisance in setup, accidents on the tail, and desire to insert midway, which we cant.
-                                    //so simple, fwd only chain of sort criteria.  They will embrace the simplicity.
-                                    foreach (SortField sf in m_sortFields)
-                                    {
-                                        if (sf.m_guiToggle == sf.m_enabled) //toggle state changed from logic
-                                        {
-                                            if (sf.m_enabled) //toggle off->on
-                                            {
-                                                m_rankSorter.AddSortField(sf);
-                                                sf.m_enabled = false;
-                                                sf.m_text = sf.m_text.Insert(0, m_rankSorter.GetTotalRanks().ToString() + "^"); //HACKJEFFGIFFEN shitty arrow
-                                                m_dirtyPages = true;
-                                            }
-                                            else
-                                            {
-                                                //can only untoggle most recent
-                                                if (sf.Equals(m_rankSorter.GetLastSortField()))
-                                                {
-                                                    m_rankSorter.RemoveLastSortField();
-                                                    sf.m_enabled = true;
-                                                    sf.m_text = sf.m_text.Remove(0, 2);
-                                                    m_dirtyPages = true;
-                                                }
-                                                else //otherwise force toggle to stay on
-                                                {
-                                                    sf.m_guiToggle = true;
-                                                }
-                                            }
-                                        }
-                                    }
-
-                                    if (m_dirtyPages)
-                                    {
-                                        //actual sort based on toggle ranks
-                                        //ok to sort on no criteria
-                                        m_dataPages.Sort(m_rankSorter);
-
-                                        //once re-ordered, indices need updating
-                                        int i = 0;
-                                        m_dataPages.ForEach(page => page.m_index = i++);
-
-                                        m_dirtyPages = false;
-                                    }
-                                }
-                                
+        if (m_state != State.Picker)
+        {
+            m_state = m_dataPages.Count > 0 ? State.Alive : State.Daemon;
+        }
 */        
         public void OnDisable()
         {

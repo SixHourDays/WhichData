@@ -69,6 +69,54 @@ namespace WhichData
         }
     }
 
+    //represents 1 field results can sort on.
+    public class SortField
+    {
+        public string m_text;
+        public bool m_guiLastToggle = false; //outgoing HUD state
+        public bool m_guiNewToggle = false; //incoming HUD state
+        public enum Mode { Off, Ascending, Descending };
+        public Mode m_mode = Mode.Off;
+        public Func<ViewPage, ViewPage, int> m_sortDlgt;
+
+        public SortField(string title, Func<ViewPage, ViewPage, int> sortDlgt)
+        { 
+            m_text = title;
+            m_sortDlgt = sortDlgt;
+        }
+
+        //templated helper factory to get the comparison dlgt made
+        public static SortField Create<T>(string title, Func<ViewPage, T> GetFieldOf) where T : IComparable
+        {
+            return new SortField(title, (x, y) => GetFieldOf(x).CompareTo(GetFieldOf(y)));
+        }
+    }
+    
+
+    //A comparator sorting on ranked SortFields.
+    public class RankedSorter : IComparer<ViewPage>
+    {
+        private List<SortField> m_sortedFields = new List<SortField>(); //ranked SortFields to sort on
+        public SortField GetLastSortField() { return m_sortedFields.Last(); }
+        public int GetTotalRanks() { return m_sortedFields.Count; }
+        public void AddSortField(SortField sf) { m_sortedFields.Add(sf); }
+        public void RemoveLastSortField() { m_sortedFields.RemoveAt(m_sortedFields.Count - 1); }
+
+        public int Compare(ViewPage x, ViewPage y)
+        {
+            // -1 < , 0 == , 1 >
+            foreach (SortField sf in m_sortedFields)
+            {
+                int result = sf.m_sortDlgt(x, y);
+                if (sf.m_mode == SortField.Mode.Descending) { result = -result; } //respect direction
+                if (result != 0) { return result; }
+            }
+
+            //if all criteria returned equal, let order of list remain
+            return 0;
+        }
+    }
+
     class GUIView
     {
         //UI
@@ -98,7 +146,7 @@ namespace WhichData
         public int m_listFieldMaxHeight = 22;  //height of each list row. min be 18, helps with click probability some
 
         //state from ksp
-        public GUIStyle m_styleRfText;       //
+        public GUIStyle m_styleRfText;
         GUISkin m_dlgSkin;
 
         //GUI state
@@ -109,11 +157,9 @@ namespace WhichData
         public bool labBtn => m_infoPane.labBtn;
         public bool transmitBtn => m_infoPane.transmitBtn;
 
+        //scroll pos of list pane
         public Vector2 m_scrollPos;
-
-
-        WhichData m_controller;
-
+        //info pane
         public BaseInfoPane m_baseInfoPane = new BaseInfoPane();
         public ViewPageInfoPane m_viewPageInfoPane = new ViewPageInfoPane();
         public BaseInfoPane m_infoPane; //is always one or the other of above
@@ -202,11 +248,42 @@ namespace WhichData
             return false;
         }
 
-        //HACKJEFFGIFFEN
+        ScreenMessage m_scrnMsg = null;
+        public void SetScreenMessage(string msg)
+        {
+            DisableScreenMessage();
+            m_scrnMsg = ScreenMessages.PostScreenMessage(msg, 3600.0f, ScreenMessageStyle.UPPER_CENTER); //one hour, then screw it
+        }
+        public void DisableScreenMessage()
+        {
+            if (m_scrnMsg != null)
+            {
+                ScreenMessages.RemoveMessage(m_scrnMsg);
+                m_scrnMsg = null;
+            }
+        }
+
+        WhichData m_controller;
+
+        //list pane sorter - keeps ranked stack of which fields to sort on
+        public RankedSorter m_rankSorter = new RankedSorter();
+        //sorting buttons - lambdas dictating member to compare on
+        public List<SortField> m_sortFields = new List<SortField>
+        {
+            SortField.Create("Part",        vp=>vp.experiment),
+            SortField.Create("Sci",         vp=>vp.m_src.m_fullValue),
+            SortField.Create("Trns",        vp=>vp.m_src.m_transmitValue),
+            SortField.Create("Lab",         vp=>vp.m_src.m_labPts),
+            SortField.Create("Mits",        vp=>vp.mits),
+            SortField.Create("Biome",       vp=>vp.biome),
+            SortField.Create("Situ",        vp=>vp.situation),
+            SortField.Create("Body",        vp=>vp.body)
+        };
         public List<ViewPage> m_viewPages = new List<ViewPage>();
+        public bool m_dirtyPages = false;
         public bool m_dirtySelection = false;
         public List<ViewPage> m_selectedPages = new List<ViewPage>();
-        public List<DataPage> selectedPages => m_selectedPages.ConvertAll(vp => vp.m_src);
+        public List<DataPage> selectedDataPages => m_selectedPages.ConvertAll(vp => vp.m_src);
         public void OnGUI()
         {
             if (m_showUI && m_viewPages.Count > 0 && m_controller.m_state == WhichData.State.Alive)
@@ -230,7 +307,7 @@ namespace WhichData
         {
             GUILayout.BeginArea(m_listPaneRect/*, HighLogic.Skin.window*/);
             {
-//                LayoutListToggles();
+                LayoutListToggles();
                 LayoutListFields();
 
             }
@@ -242,19 +319,19 @@ namespace WhichData
             GUI.DragWindow();
         }
 
-/*        public void LayoutListToggles()
+        public void LayoutListToggles()
         {
             GUILayout.BeginHorizontal();
             {
                 //sorter toggles
                 foreach (SortField sf in m_sortFields)
                 {
-                    sf.m_guiToggle = GUILayout.Toggle(sf.m_guiToggle, sf.m_text, HighLogic.Skin.button); //want a ksp button not the fat rslt dlg button
+                    sf.m_guiNewToggle = GUILayout.Toggle(sf.m_guiLastToggle, sf.m_text, HighLogic.Skin.button); //want a ksp button not the fat rslt dlg button
                 }
             }
             GUILayout.EndHorizontal();
         }
-*/
+
         public void LayoutListFields()
         {
             GUIStyle ngs = new GUIStyle(m_dlgSkin.scrollView); //HACKJEFFGIFFEN
@@ -271,10 +348,8 @@ namespace WhichData
                     pg.m_rowButton = GUILayout.Button(nothing, listField, GUILayout.MaxHeight(m_listFieldMaxHeight));
                     Rect btRect = GUILayoutUtility.GetLastRect();
                     {
-                        //experi, rec sci/%max, trns sci/%max, data mits, biome, sit, body
-                        //not atm lab points, disabling
-                        const int fields = 7; //skip lab pts
-                        float fieldWidth = btRect.width / fields;
+                        //experi, rec sci/%max, trns sci/%max, lab pts, data mits, biome, sit, body
+                        float fieldWidth = btRect.width / m_sortFields.Count;
                         Rect walker = btRect;
                         walker.width = fieldWidth;
 
@@ -297,14 +372,15 @@ namespace WhichData
                         GUI.Label(walker, trnsString, m_styleRfText);
                         walker.x += walker.width;
 
+                        //lab
+                        GUI.color = Color.white;
+                        GUI.Label(walker, pg.m_src.m_labPts.ToString(), m_styleRfText);
+                        walker.x += walker.width;
+
                         //data mits
                         GUI.color = Color.white;
                         GUI.Label(walker, pg.mits + " Mits", m_styleRfText);
                         walker.x += walker.width;
-
-                        //disabling
-                        //GUI.Label(walker, pg.showTransmitWarning ? "Disbl" : "-", m_styleRfText);
-                        //walker.x += walker.width;
 
                         //biome
                         GUI.Label(walker, pg.biome, m_styleRfText);
@@ -328,6 +404,7 @@ namespace WhichData
 
         public void Update()
         {
+            m_dirtyPages = false;
             m_dirtySelection = false;
 
             //when controller updates, view updates
@@ -340,15 +417,68 @@ namespace WhichData
 
                 m_controller.scienceDatas.ForEach(sd => m_viewPages.Add(new ViewPage(sd)));
 
-                //rebuild indices
-                int i = 0;
-                m_viewPages.ForEach(viewPage => viewPage.m_index = i++);
-
-                m_dirtySelection = true;
+                m_dirtyPages = true;
             }
 
             if (m_showUI && m_viewPages.Count > 0)
             {
+                //list field sorting && toggle chain logic
+
+                //sorters are stacked in order of enable.  top of the stack can be tricycled: off->ascend->descend[->off->ascend->descend]
+                //the other stack members can only be bicycled: off->ascend->descend[->ascend->descend]
+                foreach (SortField sf in m_sortFields)
+                {
+                    if (sf.m_guiLastToggle != sf.m_guiNewToggle)
+                    {
+                        switch( sf.m_mode )
+                        {
+                        case SortField.Mode.Off: //off->ascend
+                            m_rankSorter.AddSortField(sf);
+                            sf.m_mode = SortField.Mode.Ascending;
+                            sf.m_text = sf.m_text.Insert(0, m_rankSorter.GetTotalRanks().ToString() + "^"); //HACKJEFFGIFFEN shitty arrow
+                            sf.m_guiLastToggle = sf.m_guiNewToggle;
+                            break;
+                        case SortField.Mode.Ascending: //ascend->descend
+                            sf.m_mode = SortField.Mode.Descending;
+                            sf.m_text = sf.m_text.Remove(1, 1).Insert(1,"v"); //HACKJEFFGIFFEN shitty arrow
+                            //skip toggle state update, to leave it on
+                            break;
+                        case SortField.Mode.Descending:
+                            //only the last rank sort can turn off
+                            if (sf.Equals(m_rankSorter.GetLastSortField()))
+                            {
+                                m_rankSorter.RemoveLastSortField();
+                                sf.m_mode = SortField.Mode.Off;
+                                sf.m_text = sf.m_text.Remove(0, 2);
+                                sf.m_guiLastToggle = sf.m_guiNewToggle;
+                            }
+                            else //all other ranks roll back to ascending
+                            {
+                                sf.m_mode = SortField.Mode.Ascending;
+                                sf.m_text = sf.m_text.Remove(1, 1).Insert(1, "^"); //HACKJEFFGIFFEN shitty arrow
+                                //skip toggle state update, to leave it on
+                            }
+                            break;
+                        }
+
+                        m_dirtyPages = true;
+                    }
+                }
+
+                if (m_dirtyPages)
+                {
+                    //actual sort based on toggle ranks
+                    //ok to sort on no criteria //HACKJEFFGIFFEN we'd like 'none' to be the 'root search' order
+                    m_viewPages.Sort(m_rankSorter);
+
+                    //once re-ordered, indices need updating
+                    int i = 0;
+                    m_viewPages.ForEach(vp => vp.m_index = i++);
+
+                    m_dirtyPages = false;
+                }
+
+
                 //list click handling
 
                 //when there is no selection, default
