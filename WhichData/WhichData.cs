@@ -55,15 +55,11 @@ namespace WhichData
         public bool m_dirtyPages = false;
         public List<DataPage> scienceDatas => m_shipModel.m_scienceDatas;
         public List<DataPage> m_selectedPages = new List<DataPage>();
-
-//      HACKJEFFGIFFEN
-        bool m_ready = false;
+        bool m_RnDready = false;
 
         public void OnGUI()
         {
-           //HACKJEFFGIFFEN
-           //if (m_state == State.Alive)
-            if (m_ready)
+            if (m_RnDready)
             {
                 m_GUIView.OnGUI();
             }
@@ -87,13 +83,7 @@ namespace WhichData
 
         public void Update()
         {
-            //keep the original ERD dead
-            if (ExperimentsResultDialog.Instance != null)
-            {   //this really should go in the model, but I need GameObject.Destroy
-                Destroy(ExperimentsResultDialog.Instance.gameObject); //dead next frame
-            }
-
-            if (!m_ready)
+            if (!m_RnDready)
             {
                 while (ResearchAndDevelopment.Instance == null)
                 {
@@ -101,7 +91,7 @@ namespace WhichData
                 }
                 Debug.Log("GA unblocked by R&D, first Update");
 
-                m_ready = true;
+                m_RnDready = true;
             }
 
             m_dirtyPages = false;
@@ -175,6 +165,22 @@ namespace WhichData
 
                 //view will propogate info
                 m_GUIView.Update();
+
+                //HACKJEFFGIFFEN move to model ERD spawns tell us what to highlight
+                if (ExperimentsResultDialog.Instance != null)
+                {
+                    ExperimentsResultDialog erd = ExperimentsResultDialog.Instance;
+                    Debug.Log("GA ERD pages " + erd.pages.Count);
+                    List<DataPage> erdSelect = m_shipModel.m_scienceDatas.FindAll(dp=> erd.pages.Any(
+                        dlgpg=> dp.Equals(dlgpg) ) 
+                    );
+
+                    //override selection
+                    m_GUIView.Select(erdSelect);
+
+                    //this really should go in the model, but I need GameObject.Destroy
+                    Destroy(ExperimentsResultDialog.Instance.gameObject); //dead next frame
+                }
 
                 //remainder is calc & push data, if there is any
                 if (m_shipModel.m_scienceDatas.Count > 0)

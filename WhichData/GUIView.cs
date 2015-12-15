@@ -402,6 +402,18 @@ namespace WhichData
             GUILayout.EndScrollView();
         }
 
+        public void Select(List<DataPage> selection)
+        {
+            //unhighlight all the old
+            m_selectedPages.ForEach(page => page.m_selected = false);
+
+            m_selectedPages = selection.ConvertAll(dp => m_viewPages.Find(vp => vp.m_src == dp));
+
+            //highlight all the new
+            m_selectedPages.ForEach(page => page.m_selected = true);
+
+            m_dirtySelection = true;
+        }
         public void Update()
         {
             m_dirtyPages = false;

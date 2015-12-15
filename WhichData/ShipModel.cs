@@ -26,6 +26,7 @@ namespace WhichData
         public string m_situ;
         public string m_biome;
 
+        //for ship scans
         public bool Equals(DataPage other)
         {
             if (ReferenceEquals(this, null)) { return false; }
@@ -33,11 +34,23 @@ namespace WhichData
 
             return m_scienceData == other.m_scienceData //ref compares for ksp data is ok
                 && m_subject == other.m_subject
-                && m_dataModule == other.m_dataModule
+                && m_dataModule == other.m_dataModule   //TODOJEFFGIFFEN these 3 may not be needed..based off global state
                 && m_fullValue == other.m_fullValue     //the next & transmit values all base off this
                 && m_labPts == other.m_labPts;          //represent the content of the labs
         }
 
+        //for ERD spawns
+        public bool Equals(ExperimentResultDialogPage erdp)
+        {
+            //ERDP is a might tricky - because it only returns the host as a part, we must distinguish
+            //between containers and experiments ourselves if that part has both.
+            IScienceDataContainer cont = erdp.showReset ? 
+                erdp.host.FindModuleImplementing<ModuleScienceExperiment>() as IScienceDataContainer
+                : erdp.host.FindModuleImplementing<ModuleScienceContainer>() as IScienceDataContainer;
+
+            return m_scienceData == erdp.pageData && m_dataModule == cont;
+        }
+   
         public DataPage(IScienceDataContainer dataModule, ScienceData sciData, ShipModel shipModel)
         {
             m_scienceData = sciData;
