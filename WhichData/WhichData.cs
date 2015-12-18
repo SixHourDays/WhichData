@@ -11,40 +11,75 @@ namespace WhichData
 {
     public class ModuleWhichDataContainer : PartModule
     {
-        public override void OnAwake()
+        public ModuleScienceContainer m_container;
+        public BaseEvent m_stockCollect;
+        public BaseEvent m_stockStore;
+        public BaseEvent m_wrapCollect;
+        public BaseEvent m_wrapStore;
+        public BaseEvent m_collect;
+        public BaseEvent m_store;
+
+        //events & modules need a bit to setup, so do this after setups complete.
+        public void Start()
         {
             Debug.Log("GA ModuleWhichDataContainer");
-//            Events["CollectTURBOTACOSEvent"].active = true;
-//            Events["StoreTURBOTACOSEvent"].active = true;
-        }
-#error
-        [KSPEvent(active = true, guiActive = true, guiActiveUnfocused = false, externalToEVAOnly = false, unfocusedRange = 3f, guiName = "Collect TACOS")]
-        public void CollectTACOSEvent()//DataExternalEvent()
-        {
-            Events["CollectTURBOTACOSEvent"].active = true;
-            Debug.Log("GA Collect TACOS!");
+            m_container = part.FindModuleImplementing<ModuleScienceContainer>();
+
+            m_stockCollect = m_container.Events["CollectDataExternalEvent"];
+            m_stockStore = m_container.Events["StoreDataExternalEvent"];
+            
+            m_wrapCollect = Events["CollectWrapper"];
+            m_wrapStore = Events["StoreWrapper"];
+            m_collect = Events["CollectWhichData"];
+            m_store = Events["StoreWhichData"];
         }
 
-        [KSPEvent(active = true, guiActive = true, guiActiveUnfocused = false, externalToEVAOnly = false, unfocusedRange = 3f, guiName = "Store TACOS")]
-        public void StoreTACOSEvent()//DataExternalEvent();
+        //defaults
+        //active = true, guiName = "funcName", guiActive = false, guiActiveUnfocused = false, externalToEVAOnly = true, unfocusedRange = ??
+        [KSPEvent(guiActiveUnfocused = true, unfocusedRange = 1.3f)]
+        public void CollectWrapper()
         {
-            Debug.Log("GA Store TACOS!");
+            Debug.Log("GA CollectWrapper!");
+            m_stockCollect.Invoke();
+            //TODOJEFFGIFFEN notify WhichData
         }
 
-        [KSPEvent(active = true, guiActive = false, guiActiveUnfocused = true, externalToEVAOnly = true, unfocusedRange = 3f, guiName = "Collect Extern TACOS")]
-        public void CollectTURBOTACOSExternalEvent()//DataExternalEvent()
+        //HACKJEFFGIFFEN the radius needs to be per part
+        [KSPEvent(guiActiveUnfocused = true, unfocusedRange = 1.3f)]
+        public void StoreWrapper()
         {
-            Debug.Log("GA Collect TURBO TACOS!");
+            Debug.Log("GA StoreWrapper");
+            m_stockStore.Invoke();
+            //TODOJEFFGIFFEN notify WhichData
         }
 
-        [KSPEvent(active = true, guiActive = false, guiActiveUnfocused = true, externalToEVAOnly = true, unfocusedRange = 3f, guiName = "Store Extern TACOS")]
-        public void StoreTURBOTACOSExternalEvent()//DataExternalEvent();
+        [KSPEvent(guiActiveUnfocused = true, unfocusedRange = 1.3f)]
+        public void CollectWhichData()
         {
-            Debug.Log("GA Store TURBO TACOS!");
+            Debug.Log("GA CollectWhichData");
+            //TODOJEFFGIFFEN open WhichData to choose!  Finally, FINALLY we arrive at the original point of it all!
         }
 
-        public override void OnUpdate()
+        [KSPEvent(guiActiveUnfocused = true, unfocusedRange = 1.3f)]
+        public void StoreWhichData()
         {
+            Debug.Log("GA StoreWhichData");
+            //TODOJEFFGIFFEN open WhichData to choose!
+        }
+
+        public void Update()
+        {
+            //hide the real events
+            m_stockCollect.guiActiveUnfocused = false;
+            m_stockStore.guiActiveUnfocused = false;
+
+            //display wrappers and our events when the real events would
+            m_wrapCollect.active = m_collect.active = m_stockCollect.active;
+            m_wrapStore.active = m_store.active = m_stockStore.active;
+
+            //augment the real event names for ours
+            m_collect.guiName = "WD " + m_stockCollect.GUIName;
+            m_store.guiName = "WD " + m_stockStore.GUIName;
         }
         /*
          * Called when the game is loading the part information. It comes from: the part's cfg file,

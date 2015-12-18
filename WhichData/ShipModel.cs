@@ -222,33 +222,6 @@ namespace WhichData
                 m_containerModules = sciDataModules.OfType<ModuleScienceContainer>().ToList<ModuleScienceContainer>();
             }
 
-            //HACKJEFFGIFFEN
-            /*Debug.Log("GA ship event list");
-            foreach (Part p in FlightGlobals.ActiveVessel.Parts)
-            {
-                Debug.Log("GA " + p.ToString());
-                foreach (PartModule m in p.GetComponents<PartModule>())
-                {
-                    Debug.Log("GA - " + m.ToString());
-                    m.Events.ForEach(e => Debug.Log("GA - - " + e.GUIName +
-                        " active " + e.active +
-                        " evaOnly " + e.externalToEVAOnly + 
-                        " guiActive " + e.guiActive +
-                        " guiActiveUnfocused " + e.guiActiveUnfocused));
-                }
-            }
-            */
-            //HACKJEFFGIFFEN
-#error
-            foreach (ModuleScienceContainer cont in m_containerModules)
-            {
-                BaseEvent storeEvent = cont.Events["StoreDataExternalEvent"];
-                storeEvent.guiActive = storeEvent.guiActiveUnfocused = false;
-
-                BaseEvent collectEvent = cont.Events["CollectDataExternalEvent"];
-                collectEvent.guiActive = collectEvent.guiActiveUnfocused = false;
-            }
-
             //check labs
             List <ModuleScienceLab> labModules = FlightGlobals.ActiveVessel.FindPartModulesImplementing<ModuleScienceLab>();
             if (!labModules.SequenceEqual(m_labModules))
@@ -658,6 +631,24 @@ namespace WhichData
                     paramas += " " + pi.ParameterType.Name + " " + pi.Name;
                 }
                 Debug.Log("GA method: " + method.ReturnType.ToString() + " " + method.Name + paramas);
+            }
+        }
+
+        static void ExploreShipKSPEvents()
+        {
+            Debug.Log("GA ship event list");
+            foreach (Part p in FlightGlobals.ActiveVessel.Parts)
+            {
+                Debug.Log("GA " + p.ToString());
+                foreach (PartModule m in p.GetComponents<PartModule>())
+                {
+                    Debug.Log("GA - " + m.ToString());
+                    m.Events.ForEach(e => Debug.Log("GA - - " + e.GUIName +
+                        " active " + e.active +
+                        " evaOnly " + e.externalToEVAOnly +
+                        " guiActive " + e.guiActive +
+                        " guiActiveUnfocused " + e.guiActiveUnfocused));
+                }
             }
         }
     }
