@@ -39,25 +39,23 @@ namespace WhichData
         [KSPEvent(guiActiveUnfocused = true, unfocusedRange = 1.3f)]
         public void CollectWrapper()
         {
-            Debug.Log("GA CollectWrapper!");
             m_stockCollect.Invoke();
-            //TODOJEFFGIFFEN notify WhichData
+            WhichData.instance.OnEvaScienceMove();
         }
 
         //HACKJEFFGIFFEN the radius needs to be per part
-        [KSPEvent(guiActiveUnfocused = true, unfocusedRange = 1.3f)]
-        public void StoreWrapper()
-        {
-            Debug.Log("GA StoreWrapper");
-            m_stockStore.Invoke();
-            //TODOJEFFGIFFEN notify WhichData
-        }
-
         [KSPEvent(guiActiveUnfocused = true, unfocusedRange = 1.3f)]
         public void CollectWhichData()
         {
             Debug.Log("GA CollectWhichData");
             //TODOJEFFGIFFEN open WhichData to choose!  Finally, FINALLY we arrive at the original point of it all!
+        }
+
+        [KSPEvent(guiActiveUnfocused = true, unfocusedRange = 1.3f)]
+        public void StoreWrapper()
+        {
+            m_stockStore.Invoke();
+            WhichData.instance.OnEvaScienceMove();
         }
 
         [KSPEvent(guiActiveUnfocused = true, unfocusedRange = 1.3f)]
@@ -77,9 +75,12 @@ namespace WhichData
             m_wrapCollect.active = m_collect.active = m_stockCollect.active;
             m_wrapStore.active = m_store.active = m_stockStore.active;
 
-            //augment the real event names for ours
-            m_collect.guiName = "WD " + m_stockCollect.GUIName;
-            m_store.guiName = "WD " + m_stockStore.GUIName;
+            //disguise our wrappers with real event names
+            m_wrapCollect.guiName = m_stockCollect.GUIName;
+            m_wrapStore.guiName = m_stockStore.GUIName;
+
+            m_collect.guiName = "Take Which Data";
+            m_store.guiName = "Store Which Data";
         }
         /*
          * Called when the game is loading the part information. It comes from: the part's cfg file,
@@ -103,6 +104,7 @@ namespace WhichData
         private ShipModel m_shipModel = new ShipModel();
         private GUIView m_GUIView = new GUIView();
 
+        public static WhichData instance { get; private set; }
         //first call after ctr, so we do init here
         public void Awake()
         {
@@ -131,10 +133,14 @@ namespace WhichData
                 m_shipModel.OnAwake();
                 m_GUIView.OnAwake();
             }
+
+            instance = this;
         }
 
         public void OnDestroy()
         {
+            instance = null;
+
             m_shipModel.OnDestroy();
             m_GUIView.OnDestroy();
 
@@ -356,13 +362,11 @@ namespace WhichData
 
         public void LaunchCoroutine( IEnumerator routine ) { StartCoroutine(routine); }
 
-        //HACKJEFFGIFFEN old below
-/*
-        if (m_state != State.Picker)
+        public void OnEvaScienceMove()
         {
-            m_state = m_dataPages.Count > 0 ? State.Alive : State.Daemon;
+            m_shipModel.OnEvaScienceMove();
         }
-*/        
+             
         public void OnDisable()
         {
 //            Debug.Log("GA " + m_callCount++ + " OnDisable()");

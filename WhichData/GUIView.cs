@@ -123,8 +123,6 @@ namespace WhichData
         private bool m_showUI = true;
         public void HideUI() { m_showUI = false; }
         public void ShowUI() { m_showUI = true; }
-        //public static EventVoid onHideUI; //should respond to this if its not forced
-        //public static EventVoid onShowUI;
 
         public void OnAwake()
         {

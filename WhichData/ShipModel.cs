@@ -129,14 +129,7 @@ namespace WhichData
         public void OnShipEvent<T>(T arg) { m_partEventOccured = true; }
         public void OnCrewEvent<T>(T arg) { m_crewEventOccured = true; }
         public void OnScienceEvent<T>(T arg) { m_scienceEventOccured = true; }
-
-        //public static EventData<Part> onPartActionUICreate; //anytime right cick menu opens (mess with data name?)
-        //public static EventData<Part> onPartActionUIDismiss;
-
-        //from ModuleScienceContainer...
-        //CollectDataExternalEvent
-        //ReviewDataEvent
-        //StoreDataExternalEvent
+        public void OnEvaScienceMove() { m_scienceEventOccured = true; }
 
         public void OnAwake()
         {
