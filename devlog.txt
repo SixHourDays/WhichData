@@ -42,6 +42,7 @@ doing move has highlighted that flat sci list isnt enough:
 control w no control!  hah
 
 doing:
+to the part wars we go.  Make a part module to accompany those I wish to change right click function of - this solves eva get too.
 decided next greatest threat is EVA mode, jumping to that
 deal with the shutdown mid-copy thing
 check/solve the multiple copies in lab scenario

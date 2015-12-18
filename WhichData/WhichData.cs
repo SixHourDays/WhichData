@@ -9,6 +9,59 @@ using System.Collections;
 
 namespace WhichData
 {
+    public class ModuleWhichDataContainer : PartModule
+    {
+        public override void OnAwake()
+        {
+            Debug.Log("GA ModuleWhichDataContainer");
+//            Events["CollectTURBOTACOSEvent"].active = true;
+//            Events["StoreTURBOTACOSEvent"].active = true;
+        }
+#error
+        [KSPEvent(active = true, guiActive = true, guiActiveUnfocused = false, externalToEVAOnly = false, unfocusedRange = 3f, guiName = "Collect TACOS")]
+        public void CollectTACOSEvent()//DataExternalEvent()
+        {
+            Events["CollectTURBOTACOSEvent"].active = true;
+            Debug.Log("GA Collect TACOS!");
+        }
+
+        [KSPEvent(active = true, guiActive = true, guiActiveUnfocused = false, externalToEVAOnly = false, unfocusedRange = 3f, guiName = "Store TACOS")]
+        public void StoreTACOSEvent()//DataExternalEvent();
+        {
+            Debug.Log("GA Store TACOS!");
+        }
+
+        [KSPEvent(active = true, guiActive = false, guiActiveUnfocused = true, externalToEVAOnly = true, unfocusedRange = 3f, guiName = "Collect Extern TACOS")]
+        public void CollectTURBOTACOSExternalEvent()//DataExternalEvent()
+        {
+            Debug.Log("GA Collect TURBO TACOS!");
+        }
+
+        [KSPEvent(active = true, guiActive = false, guiActiveUnfocused = true, externalToEVAOnly = true, unfocusedRange = 3f, guiName = "Store Extern TACOS")]
+        public void StoreTURBOTACOSExternalEvent()//DataExternalEvent();
+        {
+            Debug.Log("GA Store TURBO TACOS!");
+        }
+
+        public override void OnUpdate()
+        {
+        }
+        /*
+         * Called when the game is loading the part information. It comes from: the part's cfg file,
+         * the .craft file, the persistence file, or the quicksave file.
+         */
+        public override void OnLoad(ConfigNode node)
+        {
+        }
+
+        /*
+         * Called when the game is saving the part information.
+         */
+        public override void OnSave(ConfigNode node)
+        {
+        }
+    }
+
     [KSPAddon(KSPAddon.Startup.Flight, false)] //simple enough we can just exist in flight, new instance / scene
     public class WhichData : MonoBehaviour
     {
