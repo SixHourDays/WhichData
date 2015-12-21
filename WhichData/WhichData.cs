@@ -11,7 +11,6 @@ namespace WhichData
 {
     public class ModuleWhichDataContainer : PartModule
     {
-        public ModuleScienceContainer m_container;
         public BaseEvent m_stockCollect;
         public BaseEvent m_stockStore;
         public BaseEvent m_wrapCollect;
@@ -23,20 +22,24 @@ namespace WhichData
         public void Start()
         {
             Debug.Log("GA ModuleWhichDataContainer");
-            m_container = part.FindModuleImplementing<ModuleScienceContainer>();
+            ModuleScienceContainer container = part.FindModuleImplementing<ModuleScienceContainer>();
 
-            m_stockCollect = m_container.Events["CollectDataExternalEvent"];
-            m_stockStore = m_container.Events["StoreDataExternalEvent"];
+            m_stockCollect = container.Events["CollectDataExternalEvent"];
+            m_stockStore = container.Events["StoreDataExternalEvent"];
             
             m_wrapCollect = Events["CollectWrapper"];
             m_wrapStore = Events["StoreWrapper"];
             m_collect = Events["CollectWhichData"];
             m_store = Events["StoreWhichData"];
+
+            //copy the radius from the orignial
+            m_wrapCollect.unfocusedRange = m_wrapStore.unfocusedRange = 
+                m_collect.unfocusedRange = m_store.unfocusedRange = m_stockCollect.unfocusedRange;
         }
 
         //defaults
         //active = true, guiName = "funcName", guiActive = false, guiActiveUnfocused = false, externalToEVAOnly = true, unfocusedRange = ??
-        [KSPEvent(guiActiveUnfocused = true, unfocusedRange = 1.3f)]
+        [KSPEvent(guiActiveUnfocused = true)]
         public void CollectWrapper()
         {
             m_stockCollect.Invoke();
@@ -44,21 +47,21 @@ namespace WhichData
         }
 
         //HACKJEFFGIFFEN the radius needs to be per part
-        [KSPEvent(guiActiveUnfocused = true, unfocusedRange = 1.3f)]
+        [KSPEvent(guiName = "Take Which Data", guiActiveUnfocused = true)]
         public void CollectWhichData()
         {
             Debug.Log("GA CollectWhichData");
             //TODOJEFFGIFFEN open WhichData to choose!  Finally, FINALLY we arrive at the original point of it all!
         }
 
-        [KSPEvent(guiActiveUnfocused = true, unfocusedRange = 1.3f)]
+        [KSPEvent(guiActiveUnfocused = true)]
         public void StoreWrapper()
         {
             m_stockStore.Invoke();
             WhichData.instance.OnEvaScienceMove();
         }
 
-        [KSPEvent(guiActiveUnfocused = true, unfocusedRange = 1.3f)]
+        [KSPEvent(guiName = "Store Which Data", guiActiveUnfocused = true)]
         public void StoreWhichData()
         {
             Debug.Log("GA StoreWhichData");
@@ -78,9 +81,6 @@ namespace WhichData
             //disguise our wrappers with real event names
             m_wrapCollect.guiName = m_stockCollect.GUIName;
             m_wrapStore.guiName = m_stockStore.GUIName;
-
-            m_collect.guiName = "Take Which Data";
-            m_store.guiName = "Store Which Data";
         }
         /*
          * Called when the game is loading the part information. It comes from: the part's cfg file,
@@ -179,12 +179,10 @@ namespace WhichData
         {
             if (!m_RnDready)
             {
-                while (ResearchAndDevelopment.Instance == null)
-                {
-                    return;
-                }
-                Debug.Log("GA unblocked by R&D, first Update");
+                //spin on this, we need it
+                if ( ResearchAndDevelopment.Instance == null ) { return; }
 
+                Debug.Log("GA unblocked by R&D, first Update");
                 m_RnDready = true;
             }
 
@@ -261,6 +259,11 @@ namespace WhichData
                 m_GUIView.Update();
 
                 //HACKJEFFGIFFEN move to model ERD spawns tell us what to highlight
+#error
+                new science & review data should spawn, with data to highlight specified
+                evas take / store should spawn dialog in 'fixed dst/src' mode - kerb icon, no discard, no lab, no transmit.
+                NOTE you will need to run the model on the OTHER SHIP to do take mode!
+
                 if (ExperimentsResultDialog.Instance != null)
                 {
                     ExperimentsResultDialog erd = ExperimentsResultDialog.Instance;
