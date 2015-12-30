@@ -1,7 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Text;
 using UnityEngine;
 
 namespace WhichData
@@ -17,12 +16,12 @@ namespace WhichData
         public bool m_rowButton = false;
 
         //hud display (truncated values, formatted strings etc)
-        public string title => m_src.m_subject.title;
-        public string experiment => m_src.m_experi;
-        public string body => m_src.m_body;
-        public string situation => m_src.m_situ;
-        public string biome => m_src.m_biome == string.Empty ? "Global" : m_src.m_biome;
-        public float mits => m_src.m_scienceData.dataAmount;
+        public string title { get { return m_src.m_subject.title; } }
+        public string experiment { get { return m_src.m_experi; } }
+        public string body { get { return m_src.m_body; } }
+        public string situation { get { return m_src.m_situ; } }
+        public string biome { get { return m_src.m_biome == string.Empty ? "Global" : m_src.m_biome; } }
+        public float mits { get { return m_src.m_scienceData.dataAmount; } }
         public string m_resultText;
         public string m_dataFieldDataMsg;
         public string m_dataFieldTrnsWarn;
@@ -149,18 +148,18 @@ namespace WhichData
 
         //GUI state
         //out state of buttons
-        public bool closeBtn => m_infoPane.closeBtn;
-        public bool discardBtn => m_infoPane.discardBtn;
-        public bool moveBtn => m_infoPane.moveBtn;
-        public bool labBtn => m_infoPane.labBtn;
-        public bool transmitBtn => m_infoPane.transmitBtn;
+        public bool closeBtn { get { return m_infoPane.closeBtn; } }
+        public bool discardBtn { get { return m_infoPane.discardBtn; } }
+        public bool moveBtn { get { return m_infoPane.moveBtn; } }
+        public bool labBtn { get { return m_infoPane.labBtn; } }
+        public bool transmitBtn { get { return m_infoPane.transmitBtn; } }
 
         //scroll pos of list pane
         public Vector2 m_scrollPos;
         //info pane
         public BaseInfoPane m_baseInfoPane = new BaseInfoPane();
         public ViewPageInfoPane m_viewPageInfoPane = new ViewPageInfoPane();
-        public BaseInfoPane m_infoPane; //is always one or the other of above
+        public BaseInfoPane m_infoPane = null; //is always one or the other of above
 
         //push button state to view, update view info pane w selected pages
         public void SetViewInfo(bool moveEnable, bool labEnable, bool transEnable)
@@ -181,6 +180,8 @@ namespace WhichData
                     m_infoPane = m_baseInfoPane;
                 }
             }
+
+            m_dirtySelection = false;   
         }
 
         //returns empty string on success, error string on failure
@@ -277,22 +278,39 @@ namespace WhichData
             SortField.Create("Situ",        vp=>vp.situation),
             SortField.Create("Body",        vp=>vp.body)
         };
+        public Dictionary<DataPage, ViewPage> m_dataViewMap = new Dictionary<DataPage, ViewPage>();
         public List<ViewPage> m_viewPages = new List<ViewPage>();
         public bool m_dirtyPages = false;
         public bool m_dirtySelection = false;
         public List<ViewPage> m_selectedPages = new List<ViewPage>();
-        public List<DataPage> selectedDataPages => m_selectedPages.ConvertAll(vp => vp.m_src);
+        public List<DataPage> selectedDataPages { get { return m_selectedPages.ConvertAll(vp => vp.m_src); } }
         public void OnGUI()
         {
-            if (m_showUI && m_viewPages.Count > 0 && m_controller.m_state == WhichData.State.Alive)
+            bool guiRan = false;
+
+            switch (m_controller.m_state)
             {
-                int uid = GUIUtility.GetControlID(FocusType.Passive); //get a nice unique window id from system
-                GUI.skin = m_dlgSkin;
-                m_window = GUI.Window(uid, m_window, WindowLayout, "", HighLogic.Skin.window); //style
+                case WhichData.State.Daemon:
+                case WhichData.State.Picker:
+                    //no gui
+                    break;
+                case WhichData.State.Review:
+                    if (m_showUI)
+                    {
+                        int uid = GUIUtility.GetControlID(FocusType.Passive); //get a nice unique window id from system
+                        GUI.skin = m_dlgSkin;
+                        m_window = GUI.Window(uid, m_window, WindowLayout, "", HighLogic.Skin.window); //style
+                        guiRan = true;
+                    }
+                    break;
+                default:
+                    Debug.Log("GA controller OnGUI uncaught state!!!");
+                    break;
             }
-            else
+
+            if (!guiRan)
             {
-                //manually set buttons up, when GUI code wont run to do so
+                //replicate GUIButton getting no clicks on the buttons
                 m_infoPane.closeBtn = false;
                 m_infoPane.discardBtn = false;
                 m_infoPane.moveBtn = false;
@@ -402,34 +420,55 @@ namespace WhichData
 
         public void Select(List<DataPage> selection)
         {
+            Debug.Log("GA view hard select");
             //unhighlight all the old
             m_selectedPages.ForEach(page => page.m_selected = false);
 
-            m_selectedPages = selection.ConvertAll(dp => m_viewPages.Find(vp => vp.m_src == dp));
+            m_selectedPages.Clear();
+            selection.ForEach(dp => m_selectedPages.Add( m_dataViewMap[ dp ] ));
 
             //highlight all the new
             m_selectedPages.ForEach(page => page.m_selected = true);
 
             m_dirtySelection = true;
         }
-        public void Update()
+
+        public void ResetData()
         {
-            m_dirtyPages = false;
-            m_dirtySelection = false;
+            Debug.Log("GA view reset pages");
+            m_dataViewMap.Clear();
+            m_viewPages.Clear();
+            m_selectedPages.Clear();
+            m_dirtySelection = m_dirtyPages = false;
+        }
 
-            //when controller updates, view updates
-            if (m_controller.m_dirtyPages)
+        public void DeltaData(List<DataPage> lostScienceDatas, List<DataPage> newScienceDatas)
+        {
+            Debug.Log("GA view delta pages -" + lostScienceDatas.Count + " +" + newScienceDatas.Count);
+            foreach ( DataPage dp in lostScienceDatas)
             {
-                Debug.Log("GA rebuild view pages");
-                //HACKJEFFGIFFEN the selected need preserved across this
-                m_viewPages.Clear();
-                m_selectedPages.Clear();
-
-                m_controller.scienceDatas.ForEach(sd => m_viewPages.Add(new ViewPage(sd)));
-
-                m_dirtyPages = true;
+                ViewPage vp = m_dataViewMap[ dp ];
+                m_dataViewMap.Remove(dp);
+                
+                //TODOJEFFGIFFEN this is slow
+                //clean lost pages from selected 
+                m_dirtySelection |= m_selectedPages.Remove(vp);
+                m_viewPages.Remove(vp);
             }
 
+            foreach (DataPage dp in newScienceDatas)
+            {
+                ViewPage vp = new ViewPage(dp);
+                m_viewPages.Add(vp);
+                m_dataViewMap.Add(dp, vp);
+            }
+
+            //will trigger a resort & reindexing, on next view of the gui
+            m_dirtyPages = true;
+        }
+
+        public void Update()
+        {
             if (m_showUI && m_viewPages.Count > 0)
             {
                 //list field sorting && toggle chain logic

@@ -2,7 +2,6 @@
 using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
-using System.Text;
 using UnityEngine;
 
 namespace WhichData
@@ -12,6 +11,7 @@ namespace WhichData
         public ScienceData m_scienceData;
         public ScienceSubject m_subject;
         public IScienceDataContainer m_dataModule;
+        public int m_index; //HACKJEFFGIFFEN unused?
 
         public float m_fullValue;
         public float m_nextFullValue;
@@ -27,9 +27,20 @@ namespace WhichData
         public string m_biome;
 
         //for ship scans
+        //HACKJEFFGIFFEN this will need updated to work in the multiple data 1 part scenario
+        public override int GetHashCode()
+        {
+            return m_scienceData.GetHashCode() + m_subject.GetHashCode() + m_dataModule.GetHashCode();
+        }
+
+        public override bool Equals(object obj)
+        {
+            return Equals(obj as DataPage);
+        }
+
         public bool Equals(DataPage other)
         {
-            if (ReferenceEquals(this, null)) { return false; }
+            if (ReferenceEquals(other, null)) { return false; }
             if (ReferenceEquals(this, other)) { return true; }
 
             return m_scienceData == other.m_scienceData //ref compares for ksp data is ok
@@ -50,7 +61,7 @@ namespace WhichData
 
             return m_scienceData == erdp.pageData && m_dataModule == cont;
         }
-   
+
         public DataPage(IScienceDataContainer dataModule, ScienceData sciData, ShipModel shipModel)
         {
             m_scienceData = sciData;
@@ -128,8 +139,11 @@ namespace WhichData
         //generic arg handlers
         public void OnShipEvent<T>(T arg) { m_partEventOccured = true; }
         public void OnCrewEvent<T>(T arg) { m_crewEventOccured = true; }
-        public void OnScienceEvent<T>(T arg) { m_scienceEventOccured = true; }
         public void OnEvaScienceMove() { m_scienceEventOccured = true; }
+        //notable handlers
+        public void OnScienceEvent<T>(T arg) { m_flags.experimentDeployed = m_scienceEventOccured = true; }
+        public void OnVesselSwitchEvent<T>(T arg) { m_flags.vesselSwitch = true; }
+
 
         public void OnAwake()
         {
@@ -137,7 +151,7 @@ namespace WhichData
             GameEvents.onPartCouple.Add(OnShipEvent);       //dock
             GameEvents.onPartJointBreak.Add(OnShipEvent);   //undock, shear part off, decouple, destroy (phys parts)
             GameEvents.onPartDie.Add(OnShipEvent);          //destroy (including non-phys parts)
-            GameEvents.onVesselChange.Add(OnShipEvent);     //load/launch/quicks witch
+            GameEvents.onVesselChange.Add(OnVesselSwitchEvent);     //load/launch/quicks witch
 
             GameEvents.onCrewBoardVessel.Add(OnCrewEvent);
             GameEvents.onCrewOnEva.Add(OnCrewEvent);
@@ -161,24 +175,41 @@ namespace WhichData
             GameEvents.onCrewTransferred.Remove(OnCrewEvent);
 
             GameEvents.OnExperimentDeployed.Remove(OnScienceEvent);
+
+            CancelDataQueues();
         }
 
         //flag pack
         public class Flags
         {
+            //events
+            public bool vesselSwitch { get; set; }
+            public bool experimentDeployed { get; set; }
+
             //dirty flags
             public bool sciDataModulesDirty { get; set; }
             public bool labModulesDirty { get; set; }
             public bool radioModulesDirty { get; set; }
             public bool scienceDatasDirty { get; set; }
+            public List<DataPage> newScienceDatas { get; set; }
+            public List<DataPage> lostScienceDatas { get; set; }
             public bool crewDirty { get; set; }
-            public Flags() { Clear(); }
+            public Flags()
+            {
+                newScienceDatas = new List<DataPage>();
+                lostScienceDatas = new List<DataPage>();
+                Clear();
+            }
             public void Clear()
-            { sciDataModulesDirty = labModulesDirty = radioModulesDirty = scienceDatasDirty = crewDirty = false; }
+            {
+                vesselSwitch = experimentDeployed = sciDataModulesDirty = labModulesDirty = radioModulesDirty = scienceDatasDirty = crewDirty = false;
+                newScienceDatas.Clear(); lostScienceDatas.Clear();
+            }
         }
-        private Flags m_flags = new Flags();
-        public Flags dirtyFlags { get { return m_flags; } } //get-only property
+        public Flags m_flags = new Flags();
 
+        //ship we refer to
+        public Vessel m_ship = null;
 
         //ship pieces
         //HACKJEFFGIFFEN accessors better, plus setting involves work
@@ -206,29 +237,29 @@ namespace WhichData
             //TODOJEFFGIFFEN return more detailed flags of what changed
 
             //check scidat containers
-            List<IScienceDataContainer> sciDataModules = FlightGlobals.ActiveVessel.FindPartModulesImplementing<IScienceDataContainer>();
+            List<IScienceDataContainer> sciDataModules = m_ship.FindPartModulesImplementing<IScienceDataContainer>();
             if (!sciDataModules.SequenceEqual(m_sciDataModules))
             {
                 m_flags.sciDataModulesDirty = true;
-                m_sciDataModules = sciDataModules;
+                m_sciDataModules = sciDataModules; //deliberate ref swap
                 m_experiModules = sciDataModules.OfType<ModuleScienceExperiment>().ToList<ModuleScienceExperiment>();
                 m_containerModules = sciDataModules.OfType<ModuleScienceContainer>().ToList<ModuleScienceContainer>();
             }
 
             //check labs
-            List <ModuleScienceLab> labModules = FlightGlobals.ActiveVessel.FindPartModulesImplementing<ModuleScienceLab>();
+            List <ModuleScienceLab> labModules = m_ship.FindPartModulesImplementing<ModuleScienceLab>();
             if (!labModules.SequenceEqual(m_labModules))
             {
                 m_flags.labModulesDirty = true;
-                m_labModules = labModules;
+                m_labModules = labModules; //deliberate ref swap
             }
 
             //check radios
-            List<ModuleDataTransmitter> radioModules = FlightGlobals.ActiveVessel.FindPartModulesImplementing<ModuleDataTransmitter>();
+            List<ModuleDataTransmitter> radioModules = m_ship.FindPartModulesImplementing<ModuleDataTransmitter>();
             if (!radioModules.SequenceEqual(m_radioModules))
             {
                 m_flags.radioModulesDirty = true;
-                m_radioModules = radioModules;
+                m_radioModules = radioModules; //deliberate ref swap
             }
         }
 
@@ -249,7 +280,10 @@ namespace WhichData
             if (!scienceDatas.SequenceEqual(m_scienceDatas)) //will rely on DataPage::Equals
             {
                 m_flags.scienceDatasDirty = true;
-                m_scienceDatas = scienceDatas;
+                m_flags.lostScienceDatas.AddRange( m_scienceDatas.Except(scienceDatas) ); //accumulate
+                m_flags.newScienceDatas.AddRange( scienceDatas.Except(m_scienceDatas) );
+
+                m_scienceDatas = scienceDatas; //deliberate ref swap
             }
 
             //the labs researched subjects alter the worth of the science datas
@@ -258,7 +292,7 @@ namespace WhichData
             if (!researchIDs.SequenceEqual(m_researchIDs))
             {
                 m_flags.scienceDatasDirty = true;
-                m_researchIDs = researchIDs;
+                m_researchIDs = researchIDs; //deliberate ref swap
             }
         }
 
@@ -271,6 +305,11 @@ namespace WhichData
                 m_flags.crewDirty = true;
                 //...
             }
+        }
+
+        public List<DataPage> GetContainerPages(ModuleScienceContainer cont)
+        {
+            return m_scienceDatas.FindAll(dp => dp.m_dataModule.Equals(cont));
         }
 
         WhichData m_controller;
@@ -448,24 +487,28 @@ namespace WhichData
             FireScienceEvent();
         }
 
+        public ModuleScienceLab GetPrimeLab()
+        {
+            //HACKJEFFGIFFEN multilab concerns
+            return m_labModules.First();
+        }
 
         public float GetLabResearchPoints(ScienceData sciData)
         {
             //no labs
             if (m_labModules.Count == 0) { return 0f; }
 
-            ModuleScienceLab lab = m_labModules.First(); //TODOJEFFGIFFEN multilab tests
+            ModuleScienceLab lab = GetPrimeLab();
 
             //lab already has data
             if (lab.ExperimentData.Contains(sciData.subjectID)) { return 0f; }
-            //if (!ModuleScienceLab.IsLabData(FlightGlobals.ActiveVessel, d)) { return 0f; }
 
             CelestialBody body = FlightGlobals.getMainBody();
 
             float scalar = 1f;
 
             //surface boost
-            bool grounded = FlightGlobals.ActiveVessel.Landed || FlightGlobals.ActiveVessel.Splashed;
+            bool grounded = m_ship.Landed || m_ship.Splashed;
             if (grounded)
             {
                 scalar *= 1f + lab.SurfaceBonus;
@@ -499,11 +542,10 @@ namespace WhichData
         //step1
         void LabStartCopy(DataPage dp)
         {
-            //TODOJEFFGIFFEN multiple labs concerns
             //TODOJEFFGIFFEN possible to leave scene overtop of processing long time...
             Debug.Log("GA model start lab copy " + dp.m_scienceData.subjectID);
             m_controller.LaunchCoroutine(
-                m_labModules.First().ProcessData(dp.m_scienceData, KSPLabEndCopy));
+                GetPrimeLab().ProcessData(dp.m_scienceData, KSPLabEndCopy));
             m_labCopying = true;
         }
         //poll2 & ksp callback
@@ -515,7 +557,7 @@ namespace WhichData
             Debug.Log("GA model finish lab copy " + dp.m_scienceData.subjectID);
 
             //HACKJEFFGIFFEN the lab copy fails (missing the ExperiDlg), so we manually add the pts
-            m_labModules.First().dataStored += dp.m_labPts;
+            GetPrimeLab().dataStored += dp.m_labPts;
 
             m_scienceEventOccured = true;
         }
@@ -571,14 +613,63 @@ namespace WhichData
             return errorMsg;
         }
 
+        public void CancelDataQueues()
+        {
+            //TODOJEFFGIFFEN
+            //HACKJEFFGIFFEN undo the queued data operations
+            /*m_discardDataQueue;
+            //async move
+            m_moveDataQueue;
+            m_moveDst = null;
+
+            m_labDataQueue;
+            m_labCopying = false;
+
+            m_transmitDataQueue;
+            m_transmitting = false;
+            */
+        }
+
+        public void SwitchVessel(Vessel ship)
+        {
+            if (m_ship != null)
+            {
+                CancelDataQueues();
+
+                //data based off part info
+                m_sciDataModules.Clear();
+                m_experiModules.Clear();
+                m_containerModules.Clear();
+
+                m_labModules.Clear();
+                m_radioModules.Clear();
+
+                m_scienceDatas.Clear();
+                m_researchIDs.Clear();
+            }
+
+            //data based off global events
+            m_partEventOccured = m_crewEventOccured = m_scienceEventOccured = false;
+            m_flags.Clear();
+
+            //all set - reinit
+            m_ship = ship;
+            ScanParts();
+            ScanDatas();
+            ScanCrew();
+        }
+
         public void Update()
         {
+            if (ExperimentsResultDialog.Instance != null)
+            {
+                GameObject.Destroy(ExperimentsResultDialog.Instance.gameObject); //dead next frame
+            }
+
             m_discardDataQueue.Update();
             m_moveDataQueue.Update();
             m_labDataQueue.Update();
             m_transmitDataQueue.Update();
-
-            m_flags.Clear(); //clear all dirty flags to false
 
             if (m_partEventOccured) { ScanParts(); }
             //part change can alter the sci/crew payload
@@ -587,6 +678,7 @@ namespace WhichData
 
             m_partEventOccured = m_scienceEventOccured = m_crewEventOccured = false;
         }
+
 
         //HACKJEFFGIFFEN
         static void ExploreClass(string typeName)
@@ -627,10 +719,10 @@ namespace WhichData
             }
         }
 
-        static void ExploreShipKSPEvents()
+        static void ExploreShipKSPEvents(Vessel ship)
         {
             Debug.Log("GA ship event list");
-            foreach (Part p in FlightGlobals.ActiveVessel.Parts)
+            foreach (Part p in ship.Parts)
             {
                 Debug.Log("GA " + p.ToString());
                 foreach (PartModule m in p.GetComponents<PartModule>())

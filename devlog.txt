@@ -35,9 +35,19 @@ sort list with ranked toggling
 Added lab copy sort field.
 listen for deployed to catch more science inserting to the dialog
 module manager patch created, part module created, it ghosts the stock containers and replaces their events.
+our Take Data x, Store Data x replacement events notify our model, and call stock versions
+part gain / loss updates to data - loss and gain deltas pushed to control and view
+preservation of selectees across model changes.
+always-on-if-science-aboard turned off
+close button works again
+reviewed / new data highlights
+review data spawns my dialog instead
+vessel switch working
 
 bugs:
+eva kerb has no modulewhichdatacontainer
 Kerbal's soil / eva report should not be moveable to themselves
+kerbal eva take from sci exp needs a notify 
 spamming action buttons during queued work
 doing move has highlighted that flat sci list isnt enough:
 - you can move it, get same flat order, but be in whole diff parts, no update push to sel, etc
@@ -45,22 +55,24 @@ doing move has highlighted that flat sci list isnt enough:
 control w no control!  hah
 
 doing:
+stately behaviors re-enabled
 eva get/StoreData trigger dialog
 deal with the shutdown mid-copy thing
 check/solve the multiple copies in lab scenario
 sciences going to R&D should also retrigger the dialogs...bar values will change
-evolving sequence is: model->control->view, view input->control, control->model & view
-part gain / loss updates to data - shitty full rebuild in control, shitty full copy to view
+
 dialog visually matches: so trans + next trans is 1px off.....
 
 todo:
 update group text for when move / lab / radio is disabled
-preservation of selectees across model changes.
 listen for reset to clear a data
-review data spawns my dialog instead
-reviewed / new data highlights
 listen for crew board/eva do alter the scientist clean right click menu
 more sorts: container
 gather right-click for pod, when any exp has data in it
 clean right-click for pod, when any exp is spent & scientist is aboard
 save selected state & position to ship file
+
+Why the ExperimentResultDialog isn't good enough:
+Only represents just-deployed or reviewed science, not whole onboard science payload
+No coherency - pages are spawned and forgotten, not logically attached to a part & data
+Gives you no knowledge of the *other* ship in an eva get/store
