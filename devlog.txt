@@ -1,5 +1,3 @@
-bugs:
-
 done:
 listen for undock/redock/sep/shear/die, containers, experi, labs and antenna joining or leaving the ship need accounted for
 review is all aboard
@@ -40,14 +38,16 @@ part gain / loss updates to data - loss and gain deltas pushed to control and vi
 preservation of selectees across model changes.
 always-on-if-science-aboard turned off
 close button works again
-reviewed / new data highlights
-review data spawns my dialog instead
+reviewed / new data spawns & highlights
 vessel switch working
+review exp highlights & spawns
+module manager dependency removed, dynamically lazy load helpers
+kerb helpers working (helpers pair up w experis by index in search order of ship, fixing multi-experi parts like eva kerbals)
+Helpers deal with eva-only peculiarities: suppress experi events for extern-extern deploys & data takes (match pod behavior)
 
 bugs:
-eva kerb has no modulewhichdatacontainer
 Kerbal's soil / eva report should not be moveable to themselves
-kerbal eva take from sci exp needs a notify 
+kerbal scientist externally running experi needs locked prompt of ship sci
 spamming action buttons during queued work
 doing move has highlighted that flat sci list isnt enough:
 - you can move it, get same flat order, but be in whole diff parts, no update push to sel, etc

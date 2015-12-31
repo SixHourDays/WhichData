@@ -143,7 +143,8 @@ namespace WhichData
         //notable handlers
         public void OnScienceEvent<T>(T arg) { m_flags.experimentDeployed = m_scienceEventOccured = true; }
         public void OnVesselSwitchEvent<T>(T arg) { m_flags.vesselSwitch = true; }
-
+        //keep visible ships equipped with our modules
+        public void OnVesselLoaded(Vessel v) { EnsureHelperModules(v); }
 
         public void OnAwake()
         {
@@ -151,7 +152,6 @@ namespace WhichData
             GameEvents.onPartCouple.Add(OnShipEvent);       //dock
             GameEvents.onPartJointBreak.Add(OnShipEvent);   //undock, shear part off, decouple, destroy (phys parts)
             GameEvents.onPartDie.Add(OnShipEvent);          //destroy (including non-phys parts)
-            GameEvents.onVesselChange.Add(OnVesselSwitchEvent);     //load/launch/quicks witch
 
             GameEvents.onCrewBoardVessel.Add(OnCrewEvent);
             GameEvents.onCrewOnEva.Add(OnCrewEvent);
@@ -159,6 +159,10 @@ namespace WhichData
             GameEvents.onCrewTransferred.Add(OnCrewEvent);
 
             GameEvents.OnExperimentDeployed.Add(OnScienceEvent);
+
+            GameEvents.onVesselChange.Add(OnVesselSwitchEvent);     //load/launch/quicks witch
+
+            GameEvents.onVesselLoaded.Add(OnVesselLoaded);          //when it physically loads (2.5kmish)
         }
 
         public void OnDestroy()
@@ -167,7 +171,6 @@ namespace WhichData
             GameEvents.onPartCouple.Remove(OnShipEvent);        //dock
             GameEvents.onPartJointBreak.Remove(OnShipEvent);    //undock, shear part off, decouple, destroy (phys parts)
             GameEvents.onPartDie.Remove(OnShipEvent);           //destroy (including non-phys parts)
-            GameEvents.onVesselChange.Remove(OnShipEvent);      //load/launch/quicks witch
 
             GameEvents.onCrewBoardVessel.Remove(OnCrewEvent);
             GameEvents.onCrewOnEva.Remove(OnCrewEvent);
@@ -175,6 +178,10 @@ namespace WhichData
             GameEvents.onCrewTransferred.Remove(OnCrewEvent);
 
             GameEvents.OnExperimentDeployed.Remove(OnScienceEvent);
+
+            GameEvents.onVesselChange.Remove(OnShipEvent);      //load/launch/quicks witch
+
+            GameEvents.onVesselLoaded.Remove(OnVesselLoaded);
 
             CancelDataQueues();
         }
@@ -233,6 +240,8 @@ namespace WhichData
 
         private void ScanParts()
         {
+            if ( m_ship == null ) { Debug.Log("GA ERROR model ScanParts on null ship!"); return; }
+
             Debug.Log("GA ShipModel::ScanParts");
             //TODOJEFFGIFFEN return more detailed flags of what changed
 
@@ -277,12 +286,15 @@ namespace WhichData
                 }
             }
 
+            //m_scienceDatas.ForEach(dp => Debug.Log("GA model scandatas old " + dp.m_subject.id));
+            //scienceDatas.ForEach(dp => Debug.Log("GA model scandatas new " + dp.m_subject.id));
+
             if (!scienceDatas.SequenceEqual(m_scienceDatas)) //will rely on DataPage::Equals
             {
                 m_flags.scienceDatasDirty = true;
                 m_flags.lostScienceDatas.AddRange( m_scienceDatas.Except(scienceDatas) ); //accumulate
                 m_flags.newScienceDatas.AddRange( scienceDatas.Except(m_scienceDatas) );
-
+                
                 m_scienceDatas = scienceDatas; //deliberate ref swap
             }
 
@@ -307,7 +319,7 @@ namespace WhichData
             }
         }
 
-        public List<DataPage> GetContainerPages(ModuleScienceContainer cont)
+        public List<DataPage> GetContainerPages(IScienceDataContainer cont)
         {
             return m_scienceDatas.FindAll(dp => dp.m_dataModule.Equals(cont));
         }
@@ -630,23 +642,57 @@ namespace WhichData
             */
         }
 
+        public void EnsureHelperModules(Vessel ship)
+        {
+            Debug.Log("GA model ensure " + ship.vesselName + " has helper modules");
+            //could use module manager for the ship portion of this, but that doesnt catch the kerbal eva case
+            //uniform solution this way
+
+            //FindPartModulesImplementing x4 seemed overkill
+            List<ModuleScienceContainer> containerModules = new List<ModuleScienceContainer>();
+            List<ModuleScienceExperiment> experiModules = new List<ModuleScienceExperiment>();
+            
+            List<ModuleContainerHelper> containerHelperModules = new List<ModuleContainerHelper>();
+            List<ModuleExperimentHelper> experiHelperModules = new List<ModuleExperimentHelper>();
+
+            foreach (Part p in ship.Parts)
+            {
+                foreach(PartModule pm in p.Modules)
+                {
+                    if ( pm is ModuleScienceContainer) { containerModules.Add(pm as ModuleScienceContainer); }
+                    else if (pm is ModuleScienceExperiment) { experiModules.Add(pm as ModuleScienceExperiment); }
+                    else if (pm is ModuleContainerHelper) { containerHelperModules.Add(pm as ModuleContainerHelper); }
+                    else if (pm is ModuleExperimentHelper) { experiHelperModules.Add(pm as ModuleExperimentHelper); }
+                }
+
+                //ensure helpers are paired up, then discount modules already helped
+                containerHelperModules.ForEach(ch => { ch.Start(); containerModules.Remove(ch.m_module); });
+                //any remaining modules need new helpers
+                containerModules.ForEach(c => c.part.AddModule("ModuleContainerHelper"));
+
+                experiHelperModules.ForEach(ch => { ch.Start(); experiModules.Remove(ch.m_module); });
+                experiModules.ForEach(c => c.part.AddModule("ModuleExperimentHelper"));
+            }
+
+
+
+        }
         public void SwitchVessel(Vessel ship)
         {
-            if (m_ship != null)
-            {
-                CancelDataQueues();
+            Debug.Log("GA model switchvessel to " + ship.ToString());
 
-                //data based off part info
-                m_sciDataModules.Clear();
-                m_experiModules.Clear();
-                m_containerModules.Clear();
+            CancelDataQueues();
 
-                m_labModules.Clear();
-                m_radioModules.Clear();
+            //data based off part info
+            m_sciDataModules.Clear();
+            m_experiModules.Clear();
+            m_containerModules.Clear();
 
-                m_scienceDatas.Clear();
-                m_researchIDs.Clear();
-            }
+            m_labModules.Clear();
+            m_radioModules.Clear();
+
+            m_scienceDatas.Clear();
+            m_researchIDs.Clear();
 
             //data based off global events
             m_partEventOccured = m_crewEventOccured = m_scienceEventOccured = false;
@@ -654,6 +700,9 @@ namespace WhichData
 
             //all set - reinit
             m_ship = ship;
+
+            EnsureHelperModules(m_ship);
+
             ScanParts();
             ScanDatas();
             ScanCrew();

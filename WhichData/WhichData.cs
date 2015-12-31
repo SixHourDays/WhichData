@@ -53,10 +53,10 @@ namespace WhichData
         }
         
         public List<DataPage> m_selectedPages = new List<DataPage>();
-        public ModuleScienceContainer m_reviewContainer = null;
-        //public ModuleScienceContainer m_collectContainer = null;
-        //public ModuleScienceContainer m_storeContainer = null;
-        
+        public IScienceDataContainer m_reviewContainer = null;
+        public ModuleScienceContainer m_collectContainer = null;
+        public ModuleScienceContainer m_storeContainer = null;
+
         bool m_globalsReady = false;
 
         public void OnGUI()
@@ -81,20 +81,29 @@ namespace WhichData
             Daemon, //the default.  minimized
             Review, //new science / review of onboard science
             Picker, //picking a glowing destinatino for onboard science moves
-          //  Collect,//right clicked is source, eva kerbal is dst, all actions are disabled except move
-          //  Store,  //eva kerbal is src, right clicked is dst, all actions are disabled except move
+            Collect,//right clicked is source, eva kerbal is dst, all actions are disabled except move
+            Store,  //eva kerbal is src, right clicked is dst, all actions are disabled except move
         };
         public State m_state = State.Daemon;
 
+        public int m_blockedFrames = 0;
         public void Update()
         {
-            if (!m_globalsReady)
+            //spin on these, we need em
+            if (FlightGlobals.ActiveVessel == null || ResearchAndDevelopment.Instance == null)
             {
-                //spin on these, we need em
-                if (FlightGlobals.ActiveVessel == null || ResearchAndDevelopment.Instance == null) { return; }
-
-                Debug.Log("GA controller unblocked by globals, first Update");
-                m_globalsReady = true;
+                m_blockedFrames += 1;
+                m_globalsReady = false;
+                return;
+            }
+            else
+            {
+                if (!m_globalsReady)
+                {
+                    Debug.Log("GA controller blocked by globals for " + m_blockedFrames + " frames");
+                    m_blockedFrames = 0;
+                    m_globalsReady = true;
+                }
             }
 
             m_shipModel.Update();
@@ -106,7 +115,7 @@ namespace WhichData
 
                 //reset controller back to daemon
                 m_selectedPages.Clear();
-                //m_reviewContainer = m_collectContainer = m_storeContainer = null;
+                m_reviewContainer = m_collectContainer = m_storeContainer = null;
                 m_state = State.Daemon;
 
                 //flip view
@@ -142,7 +151,7 @@ namespace WhichData
                 m_GUIView.Select(m_selectedPages);
                 m_state = State.Review;
             }
-            else if (m_reviewContainer)
+            else if (m_reviewContainer != null)
             {
                 Debug.Log("GA controller review data");
                 //right clicked container's datas becomes selection
@@ -152,15 +161,15 @@ namespace WhichData
                 m_state = State.Review;
                 m_reviewContainer = null;
             }
-            /*else if (m_collectContainer)
+            else if (m_collectContainer)
             {
                 Debug.Log("GA controller collect");
                 //clicked container's ship is src
                 //HACKJEFFGIFFEN
                 m_state = State.Collect;
             }
-            else if storewhichdata
-            */
+            //else if storewhichdata
+
 
             //picking
             switch (m_state)
@@ -253,7 +262,7 @@ namespace WhichData
                         Vector3 screenClick = Vector3.zero;
 
                         //TODOJEFFGIFFEN could be less safe here
-                        //if what we're to send, or where we're to send it, chnage - bail
+                        //if what we're to send, or where we're to send it, change - bail
                         if (flags.scienceDatasDirty || flags.sciDataModulesDirty)
                         {
                             endPicking = true;
@@ -313,21 +322,21 @@ namespace WhichData
             m_shipModel.OnEvaScienceMove();
         }
 
-        public void OnReviewData(ModuleScienceContainer container)
-        {
-            m_reviewContainer = container;
-        }
-        //TODOJEFFGIFFEN
-        /*public void OnCollectWhichData(ModuleScienceContainer container)
+        public void OnCollectWhichData(ModuleScienceContainer container)
         {
             m_collectContainer = container;
+        }
+
+        public void OnReviewData(IScienceDataContainer container)
+        {
+            m_reviewContainer = container;
         }
 
         public void OnStoreWhichData(ModuleScienceContainer container)
         {
             m_storeContainer = container;
         }
-        */
+
         public void OnDisable()
         {
 //            Debug.Log("GA " + m_callCount++ + " OnDisable()");
