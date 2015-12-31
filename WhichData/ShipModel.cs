@@ -648,16 +648,16 @@ namespace WhichData
             //could use module manager for the ship portion of this, but that doesnt catch the kerbal eva case
             //uniform solution this way
 
-            //FindPartModulesImplementing x4 seemed overkill
-            List<ModuleScienceContainer> containerModules = new List<ModuleScienceContainer>();
-            List<ModuleScienceExperiment> experiModules = new List<ModuleScienceExperiment>();
-            
-            List<ModuleContainerHelper> containerHelperModules = new List<ModuleContainerHelper>();
-            List<ModuleExperimentHelper> experiHelperModules = new List<ModuleExperimentHelper>();
-
             foreach (Part p in ship.Parts)
             {
-                foreach(PartModule pm in p.Modules)
+                //FindPartModulesImplementing x4 seemed overkill
+                List<ModuleScienceContainer> containerModules = new List<ModuleScienceContainer>();
+                List<ModuleScienceExperiment> experiModules = new List<ModuleScienceExperiment>();
+
+                List<ModuleContainerHelper> containerHelperModules = new List<ModuleContainerHelper>();
+                List<ModuleExperimentHelper> experiHelperModules = new List<ModuleExperimentHelper>();
+
+                foreach (PartModule pm in p.Modules)
                 {
                     if ( pm is ModuleScienceContainer) { containerModules.Add(pm as ModuleScienceContainer); }
                     else if (pm is ModuleScienceExperiment) { experiModules.Add(pm as ModuleScienceExperiment); }
@@ -667,16 +667,14 @@ namespace WhichData
 
                 //ensure helpers are paired up, then discount modules already helped
                 containerHelperModules.ForEach(ch => { ch.Start(); containerModules.Remove(ch.m_module); });
-                //any remaining modules need new helpers
-                containerModules.ForEach(c => c.part.AddModule("ModuleContainerHelper"));
-
                 experiHelperModules.ForEach(ch => { ch.Start(); experiModules.Remove(ch.m_module); });
+
+                //any remaining modules need new helpers (this order to better match stock order)
                 experiModules.ForEach(c => c.part.AddModule("ModuleExperimentHelper"));
+                containerModules.ForEach(c => c.part.AddModule("ModuleContainerHelper"));
             }
-
-
-
         }
+
         public void SwitchVessel(Vessel ship)
         {
             Debug.Log("GA model switchvessel to " + ship.ToString());
