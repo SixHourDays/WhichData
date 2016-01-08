@@ -116,7 +116,7 @@ namespace WhichData
         }
     }
 
-    class GUIView
+    public class GUIView
     {
         //UI
         private bool m_showUI = true;
@@ -162,21 +162,21 @@ namespace WhichData
         public BaseInfoPane m_infoPane = null; //is always one or the other of above
 
         //push button state to view, update view info pane w selected pages
-        public void SetViewInfo(bool moveEnable, bool labEnable, bool transEnable)
+        public void SetViewInfo(bool discardEnable, bool moveEnable, bool labEnable, bool transEnable)
         {
             if ( m_selectedPages.Count > 0)
             {
-                Debug.Log("GA view setup info pane & action buttons");
+                Debug.Log("GA view" + m_index + " setup info pane & action buttons");
                 if (m_selectedPages.Count == 1)
                 {
                     //display one page, traditional info pane
-                    m_viewPageInfoPane.Set(m_selectedPages.First(), moveEnable, labEnable, transEnable);
+                    m_viewPageInfoPane.Set(m_selectedPages.First(), discardEnable, moveEnable, labEnable, transEnable);
                     m_infoPane = m_viewPageInfoPane;
                 }
                 else
                 {
                     //display summary of selected pages, custom info pane
-                    m_baseInfoPane.Set(m_selectedPages, moveEnable, labEnable, transEnable);
+                    m_baseInfoPane.Set(m_selectedPages, discardEnable, moveEnable, labEnable, transEnable);
                     m_infoPane = m_baseInfoPane;
                 }
             }
@@ -185,9 +185,9 @@ namespace WhichData
         }
 
         //returns empty string on success, error string on failure
-        public string Initialize(WhichData controller)
+        public string Initialize(WhichData controller, int i)
         {
-            Debug.Log("GA GUIView::Initialize");
+            Debug.Log("GA view" + i + " Initialize");
             string errorMsg = m_baseInfoPane.Initialize();
             if ( errorMsg != string.Empty)
             {
@@ -203,6 +203,7 @@ namespace WhichData
 
             m_infoPane = m_baseInfoPane;
             m_controller = controller;
+            m_index = i;
 
             //TODOJEFFGIFFEN start validating the loads against bad data, return appropriate errors
             GUISkin[] skins = Resources.FindObjectsOfTypeAll<GUISkin>();
@@ -263,6 +264,7 @@ namespace WhichData
         }
 
         WhichData m_controller;
+        int m_index;
 
         //list pane sorter - keeps ranked stack of which fields to sort on
         public RankedSorter m_rankSorter = new RankedSorter();
@@ -286,36 +288,32 @@ namespace WhichData
         public List<DataPage> selectedDataPages { get { return m_selectedPages.ConvertAll(vp => vp.m_src); } }
         public void OnGUI()
         {
-            bool guiRan = false;
-
             switch (m_controller.m_state)
             {
-                case WhichData.State.Daemon:
-                case WhichData.State.Picker:
-                    //no gui
-                    break;
                 case WhichData.State.Review:
+                case WhichData.State.Collect:
+                case WhichData.State.Store:
                     if (m_showUI)
                     {
                         int uid = GUIUtility.GetControlID(FocusType.Passive); //get a nice unique window id from system
                         GUI.skin = m_dlgSkin;
                         m_window = GUI.Window(uid, m_window, WindowLayout, "", HighLogic.Skin.window); //style
-                        guiRan = true;
+                        break;
                     }
+                    //else
+                    goto case WhichData.State.Daemon; //explicit fallthrough
+                case WhichData.State.Daemon:
+                case WhichData.State.Picker:
+                    //no gui; replicate GUIButton returning false on the buttons
+                    m_infoPane.closeBtn = false;
+                    m_infoPane.discardBtn = false;
+                    m_infoPane.moveBtn = false;
+                    m_infoPane.labBtn = false;
+                    m_infoPane.transmitBtn = false;
                     break;
                 default:
-                    Debug.Log("GA controller OnGUI uncaught state!!!");
+                    Debug.Log("GA view" + m_index + " OnGUI uncaught state!!!");
                     break;
-            }
-
-            if (!guiRan)
-            {
-                //replicate GUIButton getting no clicks on the buttons
-                m_infoPane.closeBtn = false;
-                m_infoPane.discardBtn = false;
-                m_infoPane.moveBtn = false;
-                m_infoPane.labBtn = false;
-                m_infoPane.transmitBtn = false;
             }
         }
 
@@ -420,7 +418,7 @@ namespace WhichData
 
         public void Select(List<DataPage> selection)
         {
-            Debug.Log("GA view hard select");
+            Debug.Log("GA view" + m_index + " hard select");
             //unhighlight all the old
             m_selectedPages.ForEach(page => page.m_selected = false);
 
@@ -435,7 +433,7 @@ namespace WhichData
 
         public void ResetData()
         {
-            Debug.Log("GA view reset pages");
+            Debug.Log("GA view" + m_index + " reset pages");
             m_dataViewMap.Clear();
             m_viewPages.Clear();
             m_selectedPages.Clear();
@@ -444,7 +442,11 @@ namespace WhichData
 
         public void DeltaData(List<DataPage> lostScienceDatas, List<DataPage> newScienceDatas)
         {
-            Debug.Log("GA view delta pages -" + lostScienceDatas.Count + " +" + newScienceDatas.Count);
+            string log = "GA view" + m_index + " delta pages:";
+            if (lostScienceDatas.Count > 0) { log += " -" + lostScienceDatas.Count; }
+            if (newScienceDatas.Count > 0) { log += " +" + newScienceDatas.Count; }
+            Debug.Log(log);
+
             foreach ( DataPage dp in lostScienceDatas)
             {
                 ViewPage vp = m_dataViewMap[ dp ];
@@ -541,7 +543,7 @@ namespace WhichData
 
                 if (selectedPage != null)
                 {
-                    Debug.Log("GA view new selection");
+                    Debug.Log("GA view" + m_index + " new selection");
 
                     //unhighlight all the old
                     m_selectedPages.ForEach(page => page.m_selected = false);
@@ -623,11 +625,12 @@ namespace WhichData
         protected string m_resultText;
         protected string m_labBtnData;
         protected string m_transBtnPerc;//0% when sci is 0 pts, and integer % otherwise
+        protected bool m_discardBtnEnabled;
         protected bool m_moveBtnEnabled;
         protected bool m_labBtnEnabled;
         protected bool m_transBtnEnabled;
 
-        public void Set( List<ViewPage> selectedPages, bool moveEnable, bool labEnable, bool transEnable)
+        public void Set( List<ViewPage> selectedPages, bool discardEnable, bool moveEnable, bool labEnable, bool transEnable)
         {
             //sums of selected stats
             float recoverSci = 0.0f;
@@ -641,7 +644,7 @@ namespace WhichData
                 DataPage page = viewPage.m_src;
                 recoverSci += page.m_fullValue;
 
-                if (page.m_dataModule is ModuleScienceExperiment) { resetable += 1; }
+                if (page.m_isExperi) { resetable += 1; }
                 if (page.m_labPts > 0) { labAble += 1; }
                 labCopyData += page.m_labPts;
 
@@ -655,6 +658,7 @@ namespace WhichData
             float sciGain = HighLogic.CurrentGame.Parameters.Career.ScienceGainMultiplier;
             recoverSci *= sciGain;
             transmitSci *= sciGain;
+            //TODOJEFFGIFFEN this sucks
             m_resultText =
                 recoverSci.ToString("F1") + "pts recoverable science selected!\n" +
                 (selectedPages.Count - resetable) + " can discard, " + resetable + " can reset.\n" +
@@ -667,6 +671,7 @@ namespace WhichData
             m_transBtnPerc = transmitAvg.ToString("F0") + "%";
 
             //enable state from controller
+            m_discardBtnEnabled = discardEnable;
             m_moveBtnEnabled = moveEnable;
             m_labBtnEnabled = labEnable;
             m_transBtnEnabled = transEnable;
@@ -732,8 +737,9 @@ namespace WhichData
         {
             GUILayout.BeginVertical(GUILayout.Width(m_rightSideWidth));
             {
-                discardBtn = GUILayout.Button("", m_styleDiscardButton);
                 Color oldColor = GUI.color;
+                GUI.color = m_discardBtnEnabled ? Color.white : Color.grey; //HACKJEFFGIFFEN crap, need a state
+                discardBtn = GUILayout.Button("", m_styleDiscardButton) && m_discardBtnEnabled;
                 GUI.color = m_moveBtnEnabled ? Color.white : Color.grey; //HACKJEFFGIFFEN crap, need a state
                 moveBtn = GUILayout.Button("", m_moveBtnStyle) && m_moveBtnEnabled;
                 GUI.color = m_labBtnEnabled ? Color.white : Color.grey; //HACKJEFFGIFFEN crap, need a state
@@ -800,7 +806,7 @@ namespace WhichData
 
         //page we'll be displaying
         private ViewPage m_page;
-        public void Set( ViewPage page, bool moveEnable, bool labEnable, bool transEnable )
+        public void Set( ViewPage page, bool discardEnable, bool moveEnable, bool labEnable, bool transEnable )
         {
             m_page = page;
             m_title = page.title;
@@ -808,6 +814,7 @@ namespace WhichData
             m_labBtnData = page.m_labBtnData;
             m_transBtnPerc = page.m_transBtnPerc;
 
+            m_discardBtnEnabled = discardEnable;
             m_moveBtnEnabled = moveEnable;
             m_labBtnEnabled = labEnable;
             m_transBtnEnabled = transEnable;

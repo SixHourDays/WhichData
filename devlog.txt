@@ -40,13 +40,27 @@ always-on-if-science-aboard turned off
 close button works again
 reviewed / new data spawns & highlights
 vessel switch working
-review exp highlights & spawns
+review experi highlights & spawns
 module manager dependency removed, dynamically lazy load helpers
 kerb helpers working (helpers pair up w experis by index in search order of ship, fixing multi-experi parts like eva kerbals)
 Helpers deal with eva-only peculiarities: suppress experi events for extern-extern deploys & data takes (match pod behavior)
+view can disable discard button
+twin-model overhaul
+mode swaps now generally safer - bailing out of picker,collect is handled right
+eva "Take Which Data..." triggers dialog, and works! huzzah - the original goal!
+experiments now properly reset on discard (instead of actual discard, disabling goos and matlabs)
+eva Kerbal locks out review data move, so soil & eva report aren't moveable to themselves
+
+doing:
+eva StoreData trigger dialog
+deal with the shutdown mid-copy thing
+check/solve the multiple copies in lab scenario
+sciences going to R&D should also retrigger the dialogs...bar values will change
+
+dialog visually matches: so trans + next trans is 1px off.....
 
 bugs:
-Kerbal's soil / eva report should not be moveable to themselves
+cancel collect/store on eva distance!
 kerbal scientist externally running experi needs locked prompt of ship sci
 spamming action buttons during queued work
 doing move has highlighted that flat sci list isnt enough:
@@ -54,16 +68,8 @@ doing move has highlighted that flat sci list isnt enough:
 - similarly its possible to have to identical subjectIDs in the m_sciDataParts dictionary :-( (equals or what?)
 control w no control!  hah
 
-doing:
-stately behaviors re-enabled
-eva get/StoreData trigger dialog
-deal with the shutdown mid-copy thing
-check/solve the multiple copies in lab scenario
-sciences going to R&D should also retrigger the dialogs...bar values will change
-
-dialog visually matches: so trans + next trans is 1px off.....
-
 todo:
+prompt about partial selection no-ops..silent is bad
 update group text for when move / lab / radio is disabled
 listen for reset to clear a data
 listen for crew board/eva do alter the scientist clean right click menu

@@ -24,8 +24,8 @@ namespace WhichData
             int pairIndex = helpers.FindIndex(h => h.Equals(this));
             m_module = modules[pairIndex];
 
-            pairIndex += 1;
-            Debug.Log("GA Helper " + pairIndex + "/" + helpers.Count + " for " + m_module.name);
+            //pairIndex += 1;
+            //Debug.Log("GA Helper " + pairIndex + "/" + helpers.Count + " for " + m_module.name);
 
             m_stockCollect = m_module.Events["CollectDataExternalEvent"];
             m_stockReview = m_module.Events["ReviewDataEvent"];

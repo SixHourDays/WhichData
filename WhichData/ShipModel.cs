@@ -11,8 +11,8 @@ namespace WhichData
         public ScienceData m_scienceData;
         public ScienceSubject m_subject;
         public IScienceDataContainer m_dataModule;
-        public int m_index; //HACKJEFFGIFFEN unused?
 
+        public bool m_isExperi;
         public float m_fullValue;
         public float m_nextFullValue;
         public float m_transmitValue;
@@ -68,6 +68,7 @@ namespace WhichData
             m_subject = ResearchAndDevelopment.GetSubjectByID(m_scienceData.subjectID);
             //ModuleScienceContainer and ModuleScienceExperiment subclass this
             m_dataModule = dataModule;
+            m_isExperi = dataModule is ModuleScienceExperiment;
 
             //compose data used in row display
             //displayed science in KSP is always 2x the values used in bgr
@@ -75,7 +76,7 @@ namespace WhichData
             m_nextFullValue = ResearchAndDevelopment.GetNextScienceValue(m_scienceData.dataAmount, m_subject, 1.0f);
             m_transmitValue = ResearchAndDevelopment.GetScienceValue(m_scienceData.dataAmount, m_subject, m_scienceData.transmitValue);
             m_nextTransmitValue = ResearchAndDevelopment.GetNextScienceValue(m_scienceData.dataAmount, m_subject, m_scienceData.transmitValue);
-            m_trnsWarnEnabled = (m_dataModule is ModuleScienceExperiment) && !((ModuleScienceExperiment)m_dataModule).IsRerunnable();
+            m_trnsWarnEnabled = m_isExperi && !((ModuleScienceExperiment)m_dataModule).IsRerunnable();
             m_labPts = shipModel.GetLabResearchPoints(sciData);
 
             //parse out subjectIDs of the form (we ditch the @):
@@ -128,6 +129,13 @@ namespace WhichData
                 m_biome = subject;                                                      //LaunchPad
             }
         }
+
+        //experiments reset, containers discard.  if a non-repeatable experi discards, it becomes unusable...not our intention.
+        public void DiscardModuleData()
+        {
+            if (m_isExperi) { (m_dataModule as ModuleScienceExperiment).ResetExperiment(); } //reset when possible
+            else { m_dataModule.DumpData(m_scienceData); } //interface method
+        }
     }
 
     public class ShipModel
@@ -141,10 +149,8 @@ namespace WhichData
         public void OnCrewEvent<T>(T arg) { m_crewEventOccured = true; }
         public void OnEvaScienceMove() { m_scienceEventOccured = true; }
         //notable handlers
-        public void OnScienceEvent<T>(T arg) { m_flags.experimentDeployed = m_scienceEventOccured = true; }
-        public void OnVesselSwitchEvent<T>(T arg) { m_flags.vesselSwitch = true; }
-        //keep visible ships equipped with our modules
-        public void OnVesselLoaded(Vessel v) { EnsureHelperModules(v); }
+        private ScienceData m_deployedResult = null; //check against this later in scandata
+        public void OnScienceEvent(ScienceData result) { m_deployedResult = result; m_scienceEventOccured = true; }
 
         public void OnAwake()
         {
@@ -159,10 +165,6 @@ namespace WhichData
             GameEvents.onCrewTransferred.Add(OnCrewEvent);
 
             GameEvents.OnExperimentDeployed.Add(OnScienceEvent);
-
-            GameEvents.onVesselChange.Add(OnVesselSwitchEvent);     //load/launch/quicks witch
-
-            GameEvents.onVesselLoaded.Add(OnVesselLoaded);          //when it physically loads (2.5kmish)
         }
 
         public void OnDestroy()
@@ -179,10 +181,6 @@ namespace WhichData
 
             GameEvents.OnExperimentDeployed.Remove(OnScienceEvent);
 
-            GameEvents.onVesselChange.Remove(OnShipEvent);      //load/launch/quicks witch
-
-            GameEvents.onVesselLoaded.Remove(OnVesselLoaded);
-
             CancelDataQueues();
         }
 
@@ -190,7 +188,6 @@ namespace WhichData
         public class Flags
         {
             //events
-            public bool vesselSwitch { get; set; }
             public bool experimentDeployed { get; set; }
 
             //dirty flags
@@ -209,7 +206,7 @@ namespace WhichData
             }
             public void Clear()
             {
-                vesselSwitch = experimentDeployed = sciDataModulesDirty = labModulesDirty = radioModulesDirty = scienceDatasDirty = crewDirty = false;
+                experimentDeployed = sciDataModulesDirty = labModulesDirty = radioModulesDirty = scienceDatasDirty = crewDirty = false;
                 newScienceDatas.Clear(); lostScienceDatas.Clear();
             }
         }
@@ -240,9 +237,9 @@ namespace WhichData
 
         private void ScanParts()
         {
-            if ( m_ship == null ) { Debug.Log("GA ERROR model ScanParts on null ship!"); return; }
+            if (m_ship == null) { return; }//intentionally will happen on the extern model fairly often
 
-            Debug.Log("GA ShipModel::ScanParts");
+            Debug.Log("GA model" + m_index + " ScanParts");
             //TODOJEFFGIFFEN return more detailed flags of what changed
 
             //check scidat containers
@@ -274,7 +271,7 @@ namespace WhichData
 
         private void ScanDatas()
         {
-            Debug.Log("GA ShipModel::ScanDatas");
+            Debug.Log("GA model" + m_index + " ScanDatas");
             //check data
             //TODOJEFFGIFFEN this cooooould do partial updating based on changed containers...
             List<DataPage> scienceDatas = new List<DataPage>();
@@ -286,8 +283,8 @@ namespace WhichData
                 }
             }
 
-            //m_scienceDatas.ForEach(dp => Debug.Log("GA model scandatas old " + dp.m_subject.id));
-            //scienceDatas.ForEach(dp => Debug.Log("GA model scandatas new " + dp.m_subject.id));
+            //m_scienceDatas.ForEach(dp => Debug.Log("GA model"+m_index+" scandatas old " + dp.m_subject.id));
+            //scienceDatas.ForEach(dp => Debug.Log("GA model"+m_index+" scandatas new " + dp.m_subject.id));
 
             if (!scienceDatas.SequenceEqual(m_scienceDatas)) //will rely on DataPage::Equals
             {
@@ -296,6 +293,13 @@ namespace WhichData
                 m_flags.newScienceDatas.AddRange( scienceDatas.Except(m_scienceDatas) );
                 
                 m_scienceDatas = scienceDatas; //deliberate ref swap
+
+                //catch science experiment deploys in our new science pages
+                if ( m_deployedResult != null && m_flags.newScienceDatas.Exists(dp=> dp.m_scienceData == m_deployedResult) )
+                {
+                    m_flags.experimentDeployed = true;
+                }
+                m_deployedResult = null;
             }
 
             //the labs researched subjects alter the worth of the science datas
@@ -310,7 +314,7 @@ namespace WhichData
 
         private void ScanCrew()
         {
-            Debug.Log("GA ShipModel::ScanCrew");
+            Debug.Log("GA model" + m_index + " ScanCrew");
             //TODOJEFFGIFFEN
             if (false)
             {
@@ -324,7 +328,19 @@ namespace WhichData
             return m_scienceDatas.FindAll(dp => dp.m_dataModule.Equals(cont));
         }
 
+        public List<DataPage> GetPartPages(Part part)
+        {
+            //need to downcast interface one of two ways, to then upcast in the concrete PartModule heirarchy...
+            Func<DataPage, PartModule> cast = dp => dp.m_isExperi
+                ? dp.m_dataModule as ModuleScienceExperiment as PartModule 
+                : dp.m_dataModule as ModuleScienceContainer as PartModule;
+
+            return m_scienceDatas.FindAll(dp => cast(dp).part == part);
+        }
+
+
         WhichData m_controller;
+        int m_index;
 
 
         class DataProcessor
@@ -333,7 +349,7 @@ namespace WhichData
             Action<DataPage> m_step1;
             Func<DataPage, bool> m_poll2;
             Action<DataPage> m_step3;
-            Action m_end4;
+            public Action m_end4;
 
             bool m_polling = false;
 
@@ -391,7 +407,7 @@ namespace WhichData
             //remove data from parts
             //move step 1:
             //do this here to remove n data in 1 frame (using the DataProcessor hooks it would take n frames)
-            discards.ForEach(dp => dp.m_dataModule.DumpData( dp.m_scienceData ));
+            discards.ForEach(dp => dp.DiscardModuleData());
 
             m_discardDataQueue.Process( discards );
         }
@@ -403,10 +419,10 @@ namespace WhichData
         //step3
         void DiscardPost(DataPage dp)
         {   //HACKJEFFGIFFEN
-            Debug.Log("GA model discarded " + dp.m_scienceData.subjectID);
+            Debug.Log("GA model" + m_index + " discarded " + dp.m_scienceData.subjectID);
         }
         //end of queue
-        void FireScienceEvent() { m_scienceEventOccured = true; }
+        public void FireScienceEvent() { m_scienceEventOccured = true; }
 
 
         void HighlightPart(Part part, Color color)
@@ -475,24 +491,25 @@ namespace WhichData
         //async move
         DataProcessor m_moveDataQueue;
         ModuleScienceContainer m_moveDst = null;
-        public void ProcessMoveDatas(ModuleScienceContainer dst, List<DataPage> sources)
+        public void ProcessMoveDatas(ModuleScienceContainer dst, List<DataPage> sources, Action endStep)
         {
             m_moveDst = dst;
+            m_moveDataQueue.m_end4 = endStep; //allows us to use custom callbacks
 
             //move step 1:
             //do this here to remove n data in 1 frame (using the DataProcessor hooks it would take n frames)
-            sources.ForEach(dp => dp.m_dataModule.DumpData(dp.m_scienceData));
+            sources.ForEach(dp => dp.DiscardModuleData());
             m_moveDataQueue.Process(sources);
         }
         //step 2 is DiscardPoll
         //step3
         void MoveAdd(DataPage dp)
         {
-            Debug.Log("GA model moved " + dp.m_scienceData.subjectID);
+            Debug.Log("GA model" + m_index + " moved " + dp.m_scienceData.subjectID);
             m_moveDst.AddData(dp.m_scienceData);
         }
         //end of queue
-        void MoveEnd()
+        public void MoveEnd()
         {
             m_moveDst = null;
 
@@ -555,7 +572,7 @@ namespace WhichData
         void LabStartCopy(DataPage dp)
         {
             //TODOJEFFGIFFEN possible to leave scene overtop of processing long time...
-            Debug.Log("GA model start lab copy " + dp.m_scienceData.subjectID);
+            Debug.Log("GA model" + m_index + " start lab copy " + dp.m_scienceData.subjectID);
             m_controller.LaunchCoroutine(
                 GetPrimeLab().ProcessData(dp.m_scienceData, KSPLabEndCopy));
             m_labCopying = true;
@@ -566,7 +583,7 @@ namespace WhichData
         //step3
         void LabPostCopy(DataPage dp)
         {
-            Debug.Log("GA model finish lab copy " + dp.m_scienceData.subjectID);
+            Debug.Log("GA model" + m_index + " finish lab copy " + dp.m_scienceData.subjectID);
 
             //HACKJEFFGIFFEN the lab copy fails (missing the ExperiDlg), so we manually add the pts
             GetPrimeLab().dataStored += dp.m_labPts;
@@ -587,7 +604,7 @@ namespace WhichData
         {
             //TODOJEFFGIFFEN choosing radio
             //TODOJEFFGIFFEN kill during transmit concern
-            Debug.Log("GA model start transmit " + dp.m_scienceData.subjectID);
+            Debug.Log("GA model" + m_index + " start transmit " + dp.m_scienceData.subjectID);
             m_radioModules.First().TransmitData(new List<ScienceData>() { dp.m_scienceData });
             m_transmitting = true;
             //the callback version doesnt submit science, fires at start of antenna fold down
@@ -601,7 +618,7 @@ namespace WhichData
         //step3
         public void TransmitDiscard(DataPage dp)
         {
-            Debug.Log("GA model end transmit " + dp.m_scienceData.subjectID);
+            Debug.Log("GA model" + m_index + " end transmit " + dp.m_scienceData.subjectID);
             GameEvents.OnScienceRecieved.Remove(KSPOnScienceRcv);
             //pass off the remove to discard queue
             ProcessDiscardDatas(new List<DataPage>() { dp });
@@ -610,11 +627,13 @@ namespace WhichData
 
 
         //returns empty string on success, error string on failure
-        public string Initialize(WhichData controller)
+        public string Initialize(WhichData controller, int i)
         {
+            Debug.Log("GA model" + i + " initialize");
             string errorMsg = string.Empty;
 
             m_controller = controller;
+            m_index = i;
 
             m_discardDataQueue = new DataProcessor(null, DiscardPoll, DiscardPost, FireScienceEvent);
             m_moveDataQueue = new DataProcessor(null, DiscardPoll, MoveAdd, MoveEnd);
@@ -642,55 +661,35 @@ namespace WhichData
             */
         }
 
-        public void EnsureHelperModules(Vessel ship)
+        public void ResetData()
         {
-            Debug.Log("GA model ensure " + ship.vesselName + " has helper modules");
-            //could use module manager for the ship portion of this, but that doesnt catch the kerbal eva case
-            //uniform solution this way
+            Debug.Log("GA model" + m_index + " reset");
 
-            foreach (Part p in ship.Parts)
-            {
-                //FindPartModulesImplementing x4 seemed overkill
-                List<ModuleScienceContainer> containerModules = new List<ModuleScienceContainer>();
-                List<ModuleScienceExperiment> experiModules = new List<ModuleScienceExperiment>();
+            CancelDataQueues();
 
-                List<ModuleContainerHelper> containerHelperModules = new List<ModuleContainerHelper>();
-                List<ModuleExperimentHelper> experiHelperModules = new List<ModuleExperimentHelper>();
+            m_sciDataModules.Clear();
+            m_experiModules.Clear();
+            m_containerModules.Clear();
+            m_labModules.Clear();
+            m_radioModules.Clear();
+            m_scienceDatas.Clear();
+            m_researchIDs.Clear();
 
-                foreach (PartModule pm in p.Modules)
-                {
-                    if ( pm is ModuleScienceContainer) { containerModules.Add(pm as ModuleScienceContainer); }
-                    else if (pm is ModuleScienceExperiment) { experiModules.Add(pm as ModuleScienceExperiment); }
-                    else if (pm is ModuleContainerHelper) { containerHelperModules.Add(pm as ModuleContainerHelper); }
-                    else if (pm is ModuleExperimentHelper) { experiHelperModules.Add(pm as ModuleExperimentHelper); }
-                }
+            m_partEventOccured = m_crewEventOccured = m_scienceEventOccured = false;
+            m_flags.Clear();
 
-                //ensure helpers are paired up, then discount modules already helped
-                containerHelperModules.ForEach(ch => { ch.Start(); containerModules.Remove(ch.m_module); });
-                experiHelperModules.ForEach(ch => { ch.Start(); experiModules.Remove(ch.m_module); });
-
-                //any remaining modules need new helpers (this order to better match stock order)
-                experiModules.ForEach(c => c.part.AddModule("ModuleExperimentHelper"));
-                containerModules.ForEach(c => c.part.AddModule("ModuleContainerHelper"));
-            }
+            m_ship = null;
         }
 
         public void SwitchVessel(Vessel ship)
         {
-            Debug.Log("GA model switchvessel to " + ship.ToString());
+            if ( m_ship == ship ) { return; }
+
+            Debug.Log("GA model" + m_index + " switchvessel to " + ship.ToString());
 
             CancelDataQueues();
 
-            //data based off part info
-            m_sciDataModules.Clear();
-            m_experiModules.Clear();
-            m_containerModules.Clear();
-
-            m_labModules.Clear();
-            m_radioModules.Clear();
-
-            m_scienceDatas.Clear();
-            m_researchIDs.Clear();
+            //ScanParts will clear our lists
 
             //data based off global events
             m_partEventOccured = m_crewEventOccured = m_scienceEventOccured = false;
@@ -726,6 +725,67 @@ namespace WhichData
             m_partEventOccured = m_scienceEventOccured = m_crewEventOccured = false;
         }
 
+        public static void EnsureHelperModules(Vessel ship)
+        {
+            //could use module manager for the ship portion of this, but that doesnt catch the kerbal eva case
+            //uniform solution this way
+            int contFound = 0, contAdded = 0;
+            int experiFound = 0, experiAdded = 0;
+
+            foreach (Part p in ship.Parts)
+            {
+                //FindPartModulesImplementing x4 seemed overkill
+                List<ModuleScienceContainer> containerModules = new List<ModuleScienceContainer>();
+                List<ModuleScienceExperiment> experiModules = new List<ModuleScienceExperiment>();
+
+                List<ModuleContainerHelper> containerHelperModules = new List<ModuleContainerHelper>();
+                List<ModuleExperimentHelper> experiHelperModules = new List<ModuleExperimentHelper>();
+
+                foreach (PartModule pm in p.Modules)
+                {
+                    if (pm is ModuleScienceContainer) { containerModules.Add(pm as ModuleScienceContainer); }
+                    else if (pm is ModuleScienceExperiment) { experiModules.Add(pm as ModuleScienceExperiment); }
+                    else if (pm is ModuleContainerHelper) { containerHelperModules.Add(pm as ModuleContainerHelper); }
+                    else if (pm is ModuleExperimentHelper) { experiHelperModules.Add(pm as ModuleExperimentHelper); }
+                }
+
+                //ensure helpers are paired up, then discount modules already helped
+                foreach (ModuleContainerHelper helper in containerHelperModules)
+                {
+                    helper.Start(); //real pairing 1st time, harmless to repeat after
+                    if (containerModules.Remove(helper.m_module)) { contFound += 1; }
+                }
+
+                foreach (ModuleExperimentHelper helper in experiHelperModules)
+                {
+                    helper.Start();
+                    if (experiModules.Remove(helper.m_module)) { experiFound += 1; }
+                }
+
+                //any remaining modules need new helpers
+                contAdded += containerModules.Count;
+                containerModules.ForEach(c => c.part.AddModule("ModuleContainerHelper"));
+
+                experiAdded += experiModules.Count;
+                experiModules.ForEach(c => c.part.AddModule("ModuleExperimentHelper"));
+            }
+
+            string report = string.Empty;
+            if (contFound + experiFound > 0)
+            {
+                report += "found ";
+                if (contFound > 0) { report += contFound + " cont "; }
+                if (experiFound > 0) { report += experiFound + " experi "; }
+            }
+            if (contAdded + experiAdded > 0)
+            {
+                report += "added ";
+                if (contAdded > 0) { report += contAdded + " cont "; }
+                if (experiAdded > 0) { report += experiAdded + " experi "; }
+            }
+
+            Debug.Log("GA ensured helpers '" + ship.vesselName + "' " + report);
+        }
 
         //HACKJEFFGIFFEN
         static void ExploreClass(string typeName)
