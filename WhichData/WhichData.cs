@@ -92,8 +92,12 @@ namespace WhichData
         //only active
         public IScienceDataContainer m_reviewContainer = null;
         //only extern
+        public bool m_evaOutOfRange = false; //will cancel any of the following
+        public bool m_externCollectEvent = false;
         public ModuleScienceContainer m_externCollectContainer = null;
+        public bool m_externStoreEvent = false;
         public ModuleScienceContainer m_externStoreContainer = null;
+        //only needed to prompt the extern vessel switch
         public ModuleScienceExperiment m_externDeployExperi = null;
 
         public int m_blockedFrames = 0;
@@ -120,7 +124,7 @@ namespace WhichData
             }
         }
 
-        //HACKJEFFGIFFEN dual?
+
         bool m_discardEnabled = false;
         bool m_moveEnabled = false;
         bool m_labEnabled = false;
@@ -167,14 +171,15 @@ namespace WhichData
                 m_activeShip.SwitchVessel(FlightGlobals.ActiveVessel);
                 //model generates diff of the whole vessel
                 //data propagation clears our selected, cleans the view, populating w new data
+                m_externCollectEvent = m_externStoreEvent = false;
                 m_reviewContainer = m_externCollectContainer = m_externStoreContainer = null;
                 m_externDeployExperi = null;
             }
             else
             {
                 Vessel newExternVessel = null;
-                if (m_externCollectContainer) { newExternVessel = m_externCollectContainer.vessel; }
-                if (m_externStoreContainer) { newExternVessel = m_externStoreContainer.vessel; }
+                if (m_externCollectEvent) { newExternVessel = m_externCollectContainer.vessel; }
+                if (m_externStoreEvent) { newExternVessel = m_externStoreContainer.vessel; }
                 if (m_externDeployExperi) { newExternVessel = m_externDeployExperi.vessel; }
                 if (newExternVessel)
                 {
@@ -196,34 +201,47 @@ namespace WhichData
             //need to listen for deploy, review, and take/store, at all times
             if (m_activeShip.m_flags.experimentDeployed)
             {
-                Debug.Log("GA controller experi deploy");
+                Debug.Log("GA controller EXPERI DEPLOY");
                 Review(Active, m_activeShip.m_flags.newScienceDatas); //new experiments become the selection
                 SwitchState(State.Review);
             }
             else if (m_reviewContainer != null)
             {
-                Debug.Log("GA controller review data");
+                Debug.Log("GA controller REVIEW DATA");
                 Review(Active, m_activeShip.GetContainerPages(m_reviewContainer)); //right clicked container's datas becomes selection
                 SwitchState(State.Review);
                 m_reviewContainer = null;
             }
-            else if (m_externCollectContainer)
+            else if (m_externCollectEvent)
             {
-                //for the take/store we highlight the part's sum data - container & experi modules
+                Debug.Log("GA controller COLLECT DATA");
+                //highlight the right click part's sum data - container & experi modules
                 Review(Extern, m_externShip.GetPartPages(m_externCollectContainer.part));
-                m_externCollectContainer = null;
+                m_externCollectEvent = false;
                 SwitchState(State.Collect);
             }
-            /*else if (m_storeWhichData)
+            else if (m_externStoreEvent)
             {
-                Debug.Log("GA controller store Which Data");
-                m_state = State.Store;
+                Debug.Log("GA controller STORE DATA");
+                //highlight whole src ship's data
+                Review(Active, m_activeShip.m_scienceDatas);
+                m_externStoreEvent = false;
+                SwitchState(State.Store);
             }
-            */
-            //minimize when no data to display
-            else
+            else //cases where we go back to daemon
             {
-                if ((m_state == State.Collect ? m_externShip : m_activeShip).m_scienceDatas.Count == 0)
+                //OR together reasons to close here:
+                bool close = false;
+
+                //when eva kerb floats too far from Collect/Store part
+                close |= m_evaOutOfRange;
+                m_evaOutOfRange = false;
+
+                //when ship loses its last data, so we've nothing to display
+                //HACKJEFFGIFFEN shitty state check
+                close |= (m_state == State.Collect ? m_externShip : m_activeShip).m_scienceDatas.Count == 0;
+                
+                if (close)
                 {
                     SwitchState(State.Daemon);
                 }
@@ -352,69 +370,71 @@ namespace WhichData
                         break;
                     }
                 case State.Collect:
-                    {
-                        /*
-                        kerb icon
-                        */
-
-                        m_externView.Update();
-
-                        //lock appropriate actions for selection that [we set to/user clicked on] the view
-                        if (m_externSelectedDirty || m_externView.m_dirtySelection)
-                        {
-                            Debug.Log("GA controller extern selection button locking");
-
-                            //when user has changed selection
-                            if (!m_externSelectedDirty)
-                            {
-                                m_externSelectedPages.Clear();
-                                m_externSelectedPages.AddRange(m_externView.selectedDataPages);
-                            }
-
-                            //in collect mode, we only allow data move.
-                            m_moveEnabled = true;
-                            m_discardEnabled = m_labEnabled = m_transEnabled = false;
-
-                            //locks as told, and clears view dirty select flag
-                            m_externView.SetViewInfo(m_discardEnabled, m_moveEnabled, m_labEnabled, m_transEnabled);
-                            m_externSelectedDirty = false;
-                        }
-
-                        //TODOJEFFGIFFEN
-                        //move button imagery:
-                        //  eva get should be folder arrow kerb
-                        //  eva put should be folder arrow capsule
-
-                        //action button handling
-                        if (m_externView.closeBtn)
-                        {
-                            EndExternMove();
-                        }
-
-                        //move btn
-                        if (m_externView.moveBtn && m_moveEnabled)
-                        {
-                            //we know active will be our eva kerb
-                            ModuleScienceContainer dst = m_activeShip.m_containerModules[0];
-                            //partial selection: discard repeats wrt container
-                            if (!dst.allowRepeatedSubjects) { m_externSelectedPages.RemoveAll(dp => dst.HasData(dp.m_scienceData)); }
-
-                            //#error concern about if the lost/new queues will catch all the change from moves off ship + a ship switch
-                            m_externShip.ProcessMoveDatas(dst, m_externSelectedPages, EndExternMove);
-                        }
-
-                        break;
-                    }
+                    //kerb icon
+                    UpdateExternMove(Extern, m_activeShip.m_containerModules[0]); //active ship is eva kerb, our dst
+                    break;
+                case State.Store:
+                    //pod icon
+                    UpdateExternMove(Active, m_externStoreContainer); //right clicked part is dst
+                    break;
                 case State.Daemon:
-                    {
-                        break;
-                    }
+                {
+                    break;
+                }
                 default: break;
             }
 
             //done w model flags
             m_activeShip.m_flags.Clear();
             m_externShip.m_flags.Clear();
+        }
+
+        public void UpdateExternMove(int reviewIndex, ModuleScienceContainer dst)
+        {
+            int i = reviewIndex;
+            List<DataPage> selection = m_selectedLists[i];
+            GUIView view = m_guiViews[i];
+
+            view.Update();
+
+            //lock appropriate actions for selection that [we set to/user clicked on] the view
+            if (m_selectedDirty[i] || view.m_dirtySelection)
+            {
+                Debug.Log("GA controller active selection button locking");
+
+                //when user has changed selection
+                if (!m_selectedDirty[i])
+                {
+                    selection.Clear();
+                    selection.AddRange(view.selectedDataPages);
+                }
+
+                //knowing dst up front, we can screen for repeats wrt container
+                if (dst.allowRepeatedSubjects) { m_moveEnabled = true; }
+                else { m_moveEnabled = selection.FindAll(dp => !dst.HasData(dp.m_scienceData)).Count > 0; }
+                
+                //in collect mode, we only allow data move.
+                m_discardEnabled = m_labEnabled = m_transEnabled = false;
+
+                //locks as told, and clears view dirty select flag
+                view.SetViewInfo(m_discardEnabled, m_moveEnabled, m_labEnabled, m_transEnabled);
+                m_selectedDirty[i] = false;
+            }
+
+            //action button handling
+            if (view.closeBtn)
+            {
+                EndExternMove();
+            }
+
+            //move btn
+            if (view.moveBtn && m_moveEnabled)
+            {
+                //partial selection: discard repeats wrt container
+                if (!dst.allowRepeatedSubjects) { selection.RemoveAll(dp => dst.HasData(dp.m_scienceData)); }
+
+                m_shipModels[i].ProcessMoveDatas(dst, selection, EndExternMove);
+            }
         }
 
         public void SwitchState(State newState)
@@ -427,10 +447,8 @@ namespace WhichData
                         EndPicking();
                         break;
                     case State.Collect:
-                        EndExternMove();
-                        break;
                     case State.Store:
-                        //EndExternCollect?
+                        EndExternMove();
                         break;
                     case State.Daemon:
                     case State.Review:
@@ -457,6 +475,9 @@ namespace WhichData
             m_externSelectedPages.Clear();
             m_externSelectedDirty = false;
             m_externView.ResetData();
+
+            m_externCollectContainer = null; //double duty to share the method
+            m_externStoreContainer = null;
 
             m_activeShip.FireScienceEvent(); //pump the active model
 
@@ -496,10 +517,20 @@ namespace WhichData
             m_activeShip.OnEvaScienceMove();
         }
 
+        public void OnEVAOutOfRange(ModuleScienceContainer container)
+        {
+            //check whats current so chained dialogs dont have old out-of-range events close new dialogs
+            if (m_externCollectContainer == container || m_externStoreContainer == container)
+            {
+                m_evaOutOfRange = true;
+            }
+        }
+
         //only from external containers - experis offer only Take All (1)
         public void OnCollectWhichData(ModuleScienceContainer container)
         {
             m_externCollectContainer = container;
+            m_externCollectEvent = true;
         }
 
         //potentially from active ship containers or experis
@@ -512,6 +543,7 @@ namespace WhichData
         public void OnStoreWhichData(ModuleScienceContainer container)
         {
             m_externStoreContainer = container;
+            m_externStoreEvent = true;
         }
 
         public void OnDisable()

@@ -47,20 +47,18 @@ Helpers deal with eva-only peculiarities: suppress experi events for extern-exte
 view can disable discard button
 twin-model overhaul
 mode swaps now generally safer - bailing out of picker,collect is handled right
-eva "Take Which Data..." triggers dialog, and works! huzzah - the original goal!
+eva "Take/Store Which Data..." triggers dialog, and works! huzzah - the original goal!
 experiments now properly reset on discard (instead of actual discard, disabling goos and matlabs)
 eva Kerbal locks out review data move, so soil & eva report aren't moveable to themselves
+collect/store cancels on eva distance
 
 doing:
-eva StoreData trigger dialog
 deal with the shutdown mid-copy thing
 check/solve the multiple copies in lab scenario
 sciences going to R&D should also retrigger the dialogs...bar values will change
-
 dialog visually matches: so trans + next trans is 1px off.....
 
 bugs:
-cancel collect/store on eva distance!
 kerbal scientist externally running experi needs locked prompt of ship sci
 spamming action buttons during queued work
 doing move has highlighted that flat sci list isnt enough:

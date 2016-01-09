@@ -438,6 +438,11 @@ namespace WhichData
             m_viewPages.Clear();
             m_selectedPages.Clear();
             m_dirtySelection = m_dirtyPages = false;
+            m_infoPane.closeBtn = false;
+            m_infoPane.discardBtn = false;
+            m_infoPane.moveBtn = false;
+            m_infoPane.labBtn = false;
+            m_infoPane.transmitBtn = false;
         }
 
         public void DeltaData(List<DataPage> lostScienceDatas, List<DataPage> newScienceDatas)

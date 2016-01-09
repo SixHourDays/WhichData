@@ -131,15 +131,28 @@ namespace WhichData
             m_collect = Events["CollectWhichData"];
             m_store = Events["StoreWhichData"];
 
+            //ensure CollectWrapper goes ahead of CollectWhichData in right click menu
+            Events.Remove(m_wrapCollect);
+            Events.Insert(Events.IndexOf(m_collect), m_wrapCollect);
+
             //copy the radius from the orignial
             m_wrapStore.unfocusedRange = m_collect.unfocusedRange = m_store.unfocusedRange = m_stockCollect.unfocusedRange;
+            m_evaWhichDataSqrRange = m_collect.unfocusedRange * m_collect.unfocusedRange;
+
+            //eva's use alternate text
+            if (vessel.isEVA) { m_store.guiName = "Give Which Data..."; }
         }
+
+        //track when we'veprompted an eva collect/store dialog
+        bool m_evaWhichData = false;
+        float m_evaWhichDataSqrRange;
 
         //HACKJEFFGIFFEN the radius needs to be per part
         [KSPEvent(guiName = "Take Which Data...", guiActiveUnfocused = true)]
         public void CollectWhichData()
         {
             WhichData.instance.OnCollectWhichData(m_module);
+            m_evaWhichData = true;
         }
 
         [KSPEvent(guiActiveUnfocused = true)]
@@ -153,6 +166,7 @@ namespace WhichData
         public void StoreWhichData()
         {
             WhichData.instance.OnStoreWhichData(m_module);
+            m_evaWhichData = true;
         }
 
         public override void Update()
@@ -165,6 +179,19 @@ namespace WhichData
             //display wrappers and our events when the real events would
             m_wrapCollect.active = m_collect.active = m_stockCollect.active;
             m_wrapStore.active = m_store.active = m_stockStore.active;
+
+            //when eva kerb floats out of right click range, notify to kill dialog
+            if (m_evaWhichData)
+            {
+                //
+                Vector3 offsetToShip = part.transform.position - FlightGlobals.ActiveVessel.transform.position;
+                float sqrDst = offsetToShip.sqrMagnitude;
+                if ( sqrDst > m_evaWhichDataSqrRange )
+                {
+                    WhichData.instance.OnEVAOutOfRange(m_module);
+                    m_evaWhichData = false;
+                }
+            }
 
             //disguise our wrappers with real event names
             m_wrapCollect.guiName = m_stockCollect.GUIName;
