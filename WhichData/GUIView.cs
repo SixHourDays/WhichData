@@ -22,6 +22,7 @@ namespace WhichData
         public string situation { get { return m_src.m_situ; } }
         public string biome { get { return m_src.m_biome == string.Empty ? "Global" : m_src.m_biome; } }
         public float mits { get { return m_src.m_scienceData.dataAmount; } }
+        public string m_host;
         public string m_resultText;
         public string m_dataFieldDataMsg;
         public string m_dataFieldTrnsWarn;
@@ -41,7 +42,8 @@ namespace WhichData
             m_src = src;
             ScienceSubject subject = m_src.m_subject;
             ScienceData scidata = m_src.m_scienceData;
-
+            //trim down the (rather illustrious) names as best we can
+            m_host = m_src.m_partModule.part.partInfo.title.Replace(" ", null).Replace(".",null).Replace("-", null);
             m_resultText = ResearchAndDevelopment.GetResults(subject.id);
 
             //all displayed science is boosted by this
@@ -271,10 +273,11 @@ namespace WhichData
         //sorting buttons - lambdas dictating member to compare on
         public List<SortField> m_sortFields = new List<SortField>
         {
-            SortField.Create("Part",        vp=>vp.experiment),
+            SortField.Create("Exp",         vp=>vp.experiment),
             SortField.Create("Sci",         vp=>vp.m_src.m_fullValue),
             SortField.Create("Trns",        vp=>vp.m_src.m_transmitValue),
             SortField.Create("Lab",         vp=>vp.m_src.m_labPts),
+            SortField.Create("Host",        vp=>vp.m_host),
             SortField.Create("Mits",        vp=>vp.mits),
             SortField.Create("Biome",       vp=>vp.biome),
             SortField.Create("Situ",        vp=>vp.situation),
@@ -321,6 +324,7 @@ namespace WhichData
         {
             GUILayout.BeginArea(m_listPaneRect/*, HighLogic.Skin.window*/);
             {
+                LayoutHeaderBar();
                 LayoutListToggles();
                 LayoutListFields();
 
@@ -333,14 +337,34 @@ namespace WhichData
             GUI.DragWindow();
         }
 
+        public void LayoutHeaderBar()
+        {
+            GUILayout.Space(5); //px aligns bottom of header text w title bar text
+            GUILayout.BeginHorizontal();
+            {
+                GUILayout.FlexibleSpace(); //auto-centers by even pads
+                //HACKJEFFGIFFEN
+                GUIStyle header = new GUIStyle(HighLogic.Skin.label);
+                header.fontStyle = FontStyle.Bold;
+                header.wordWrap = false;
+                header.clipping = TextClipping.Clip;
+                GUILayout.Label(m_controller.GetHeaderString(), header);
+
+                GUILayout.FlexibleSpace(); //auto-centers by even pads
+            }
+            GUILayout.EndHorizontal();
+        }
+
         public void LayoutListToggles()
         {
             GUILayout.BeginHorizontal();
             {
+                //experi, rec sci/%max, trns sci/%max, lab pts, data mits, biome, sit, body
+                float fieldWidth = (m_listPaneRect.width - 37) / m_sortFields.Count; //HACKJEFFGIFFEN accomodate pads
                 //sorter toggles
                 foreach (SortField sf in m_sortFields)
                 {
-                    sf.m_guiNewToggle = GUILayout.Toggle(sf.m_guiLastToggle, sf.m_text, HighLogic.Skin.button); //want a ksp button not the fat rslt dlg button
+                    sf.m_guiNewToggle = GUILayout.Toggle(sf.m_guiLastToggle, sf.m_text, HighLogic.Skin.button, GUILayout.Width(fieldWidth)); //want a ksp button not the fat rslt dlg button
                 }
             }
             GUILayout.EndHorizontal();
@@ -371,6 +395,7 @@ namespace WhichData
                         GUI.color = Color.white;
                         GUIStyle cliptext = new GUIStyle(m_styleRfText); //HACKJEFFGIFFEN
                         cliptext.clipping = TextClipping.Clip;
+                        cliptext.alignment = TextAnchor.MiddleLeft;
                         GUI.Label(walker, pg.experiment, cliptext);
                         walker.x += walker.width;
 
@@ -391,8 +416,11 @@ namespace WhichData
                         GUI.Label(walker, pg.m_src.m_labPts.ToString(), m_styleRfText);
                         walker.x += walker.width;
 
+                        //host
+                        GUI.Label(walker, pg.m_host, cliptext);
+                        walker.x += walker.width;
+
                         //data mits
-                        GUI.color = Color.white;
                         GUI.Label(walker, pg.mits + " Mits", m_styleRfText);
                         walker.x += walker.width;
 
@@ -605,7 +633,7 @@ namespace WhichData
             m_styleResetButton = dlgSkin.GetStyle("reset button");
             
             //our on disk assets
-            m_closeBtnStyle.margin = new RectOffset(6, 6, 0, 0); //top pad from window, bottom irrelevant
+            m_closeBtnStyle.margin = new RectOffset(6, 6, 2, 0); //left,right,top pads, bottom irrelevant
             m_closeBtnStyle.fixedWidth = m_closeBtnStyle.fixedHeight = 25.0f;
             m_closeBtnStyle.normal.background = GameDatabase.Instance.GetTexture("SixHourDays/closebtnnormal", false);
             m_closeBtnStyle.hover.background = GameDatabase.Instance.GetTexture("SixHourDays/closebtnhover", false);
@@ -729,7 +757,7 @@ namespace WhichData
             }
             GUILayout.EndHorizontal();
 
-            GUILayout.Space(4); //HACKJEFFGIFFEN to align with the list pane's top
+            GUILayout.Space(3); //px to align with the sorter buttons
         }
 
         public virtual void LayoutBody()
@@ -742,6 +770,7 @@ namespace WhichData
         {
             GUILayout.BeginVertical(GUILayout.Width(m_rightSideWidth));
             {
+                GUILayout.Space(3); //px line up discard with info pane body
                 Color oldColor = GUI.color;
                 GUI.color = m_discardBtnEnabled ? Color.white : Color.grey; //HACKJEFFGIFFEN crap, need a state
                 discardBtn = GUILayout.Button("", m_styleDiscardButton) && m_discardBtnEnabled;

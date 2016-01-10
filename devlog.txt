@@ -51,6 +51,7 @@ eva "Take/Store Which Data..." triggers dialog, and works! huzzah - the original
 experiments now properly reset on discard (instead of actual discard, disabling goos and matlabs)
 eva Kerbal locks out review data move, so soil & eva report aren't moveable to themselves
 collect/store cancels on eva distance
+dialog status header, shows state, ship name, labbing / transmitting
 
 doing:
 deal with the shutdown mid-copy thing

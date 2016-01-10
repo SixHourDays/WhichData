@@ -11,6 +11,7 @@ namespace WhichData
         public ScienceData m_scienceData;
         public ScienceSubject m_subject;
         public IScienceDataContainer m_dataModule;
+        public PartModule m_partModule;
 
         public bool m_isExperi;
         public float m_fullValue;
@@ -69,6 +70,10 @@ namespace WhichData
             //ModuleScienceContainer and ModuleScienceExperiment subclass this
             m_dataModule = dataModule;
             m_isExperi = dataModule is ModuleScienceExperiment;
+            m_partModule = m_isExperi //downcast off interface 1:2 ways, then upcast back to common concrete heirarchy
+              ? m_dataModule as ModuleScienceExperiment as PartModule
+              : m_dataModule as ModuleScienceContainer as PartModule;
+            
 
             //compose data used in row display
             //displayed science in KSP is always 2x the values used in bgr
@@ -253,7 +258,7 @@ namespace WhichData
             }
 
             //check labs
-            List <ModuleScienceLab> labModules = m_ship.FindPartModulesImplementing<ModuleScienceLab>();
+            List<ModuleScienceLab> labModules = m_ship.FindPartModulesImplementing<ModuleScienceLab>();
             if (!labModules.SequenceEqual(m_labModules))
             {
                 m_flags.labModulesDirty = true;
@@ -289,13 +294,13 @@ namespace WhichData
             if (!scienceDatas.SequenceEqual(m_scienceDatas)) //will rely on DataPage::Equals
             {
                 m_flags.scienceDatasDirty = true;
-                m_flags.lostScienceDatas.AddRange( m_scienceDatas.Except(scienceDatas) ); //accumulate
-                m_flags.newScienceDatas.AddRange( scienceDatas.Except(m_scienceDatas) );
-                
+                m_flags.lostScienceDatas.AddRange(m_scienceDatas.Except(scienceDatas)); //accumulate
+                m_flags.newScienceDatas.AddRange(scienceDatas.Except(m_scienceDatas));
+
                 m_scienceDatas = scienceDatas; //deliberate ref swap
 
                 //catch science experiment deploys in our new science pages
-                if ( m_deployedResult != null && m_flags.newScienceDatas.Exists(dp=> dp.m_scienceData == m_deployedResult) )
+                if (m_deployedResult != null && m_flags.newScienceDatas.Exists(dp => dp.m_scienceData == m_deployedResult))
                 {
                     m_flags.experimentDeployed = true;
                 }
@@ -330,12 +335,7 @@ namespace WhichData
 
         public List<DataPage> GetPartPages(Part part)
         {
-            //need to downcast interface one of two ways, to then upcast in the concrete PartModule heirarchy...
-            Func<DataPage, PartModule> cast = dp => dp.m_isExperi
-                ? dp.m_dataModule as ModuleScienceExperiment as PartModule 
-                : dp.m_dataModule as ModuleScienceContainer as PartModule;
-
-            return m_scienceDatas.FindAll(dp => cast(dp).part == part);
+            return m_scienceDatas.FindAll(dp => dp.m_partModule.part == part);
         }
 
 
@@ -345,7 +345,7 @@ namespace WhichData
 
         class DataProcessor
         {
-            List<DataPage> m_queue = new List<DataPage>();
+            public List<DataPage> m_queue = new List<DataPage>();
             Action<DataPage> m_step1;
             Func<DataPage, bool> m_poll2;
             Action<DataPage> m_step3;
@@ -407,9 +407,9 @@ namespace WhichData
             //remove data from parts
             //move step 1:
             //do this here to remove n data in 1 frame (using the DataProcessor hooks it would take n frames)
-            discards.ForEach(dp => dp.DiscardModuleData());
+            discards.ForEach(dp => dp.DiscardModuleData()); //note helper version will properly reset experiments
 
-            m_discardDataQueue.Process( discards );
+            m_discardDataQueue.Process(discards);
         }
         //poll2
         bool DiscardPoll(DataPage dp)
@@ -498,7 +498,7 @@ namespace WhichData
 
             //move step 1:
             //do this here to remove n data in 1 frame (using the DataProcessor hooks it would take n frames)
-            sources.ForEach(dp => dp.DiscardModuleData());
+            sources.ForEach(dp => dp.m_dataModule.DumpData(dp.m_scienceData)); //note direct dump version, so experiments unusable after
             m_moveDataQueue.Process(sources);
         }
         //step 2 is DiscardPoll
@@ -612,17 +612,25 @@ namespace WhichData
             //so we temporarily subscribe to science recieve event as our poll2 step
             GameEvents.OnScienceRecieved.Add(KSPOnScienceRcv);
         }
-        //poll2 && ksp callback
-        void KSPOnScienceRcv(float sciEarned, ScienceSubject s, ProtoVessel p, bool b) { m_transmitting = false; } //unsure what b does
-        public bool TransmitIsSent(DataPage dp) { return !m_transmitting; }
+        //ksp callback - verify callback is us, flag tranmsit done, and begin data dump (takes a frame)
+        void KSPOnScienceRcv(float sciEarned, ScienceSubject s, ProtoVessel p, bool b) //unsure what b does
+        {
+            DataPage dp = m_transmitDataQueue.m_queue.First();
+            if (dp.m_scienceData.subjectID == s.id)
+            {
+                m_transmitting = false;
+                dp.m_dataModule.DumpData(dp.m_scienceData);  //note direct dump version, so experiments unusable after
+            }
+        }
+        //poll2
+        public bool TransmitIsSent(DataPage dp) { return !m_transmitting && DiscardPoll(dp); }
         //step3
         public void TransmitDiscard(DataPage dp)
         {
             Debug.Log("GA model" + m_index + " end transmit " + dp.m_scienceData.subjectID);
             GameEvents.OnScienceRecieved.Remove(KSPOnScienceRcv);
-            //pass off the remove to discard queue
-            ProcessDiscardDatas(new List<DataPage>() { dp });
-            //no need to fire event, Discard will
+
+            FireScienceEvent();
         }
 
 
@@ -640,8 +648,26 @@ namespace WhichData
             m_labDataQueue = new DataProcessor(LabStartCopy, LabIsDone, LabPostCopy, null);
             m_transmitDataQueue = new DataProcessor(TransmitSend, TransmitIsSent, TransmitDiscard, null);
 
-            
+
             return errorMsg;
+        }
+
+        public string GetShipString()
+        {
+            return ShipString(m_ship);
+        }
+        public static string ShipString(Vessel v)
+        {
+            return "[ " + v.vesselName + " ]";
+        }
+        public string GetStatusString()
+        {
+            string header = string.Empty;
+            //skip discard and move, they're 2 frame operations anyway
+            if (m_labDataQueue.m_queue.Count > 0) { header += ", " + m_labDataQueue.m_queue.Count + " lab copying"; }
+            if (m_transmitDataQueue.m_queue.Count > 0) { header += ", " + m_transmitDataQueue.m_queue.Count + " transmitting"; }
+
+            return header;
         }
 
         public void CancelDataQueues()

@@ -1,4 +1,5 @@
-﻿using System.Collections;
+﻿using System;
+using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 
@@ -179,7 +180,6 @@ namespace WhichData
             {
                 Vessel newExternVessel = null;
                 if (m_externCollectEvent) { newExternVessel = m_externCollectContainer.vessel; }
-                if (m_externStoreEvent) { newExternVessel = m_externStoreContainer.vessel; }
                 if (m_externDeployExperi) { newExternVessel = m_externDeployExperi.vessel; }
                 if (newExternVessel)
                 {
@@ -371,11 +371,11 @@ namespace WhichData
                     }
                 case State.Collect:
                     //kerb icon
-                    UpdateExternMove(Extern, m_activeShip.m_containerModules[0]); //active ship is eva kerb, our dst
+                    UpdateExternMove(Extern, m_activeShip.m_containerModules[0], EndCollectMove); //active ship is eva kerb, our dst
                     break;
                 case State.Store:
                     //pod icon
-                    UpdateExternMove(Active, m_externStoreContainer); //right clicked part is dst
+                    UpdateExternMove(Active, m_externStoreContainer, EndStoreMove); //right clicked part is dst
                     break;
                 case State.Daemon:
                 {
@@ -389,7 +389,7 @@ namespace WhichData
             m_externShip.m_flags.Clear();
         }
 
-        public void UpdateExternMove(int reviewIndex, ModuleScienceContainer dst)
+        public void UpdateExternMove(int reviewIndex, ModuleScienceContainer dst, Action endFunc)
         {
             int i = reviewIndex;
             List<DataPage> selection = m_selectedLists[i];
@@ -424,7 +424,7 @@ namespace WhichData
             //action button handling
             if (view.closeBtn)
             {
-                EndExternMove();
+                endFunc();
             }
 
             //move btn
@@ -433,7 +433,7 @@ namespace WhichData
                 //partial selection: discard repeats wrt container
                 if (!dst.allowRepeatedSubjects) { selection.RemoveAll(dp => dst.HasData(dp.m_scienceData)); }
 
-                m_shipModels[i].ProcessMoveDatas(dst, selection, EndExternMove);
+                m_shipModels[i].ProcessMoveDatas(dst, selection, endFunc);
             }
         }
 
@@ -447,8 +447,10 @@ namespace WhichData
                         EndPicking();
                         break;
                     case State.Collect:
+                        EndCollectMove();
+                        break;
                     case State.Store:
-                        EndExternMove();
+                        EndStoreMove();
                         break;
                     case State.Daemon:
                     case State.Review:
@@ -469,7 +471,7 @@ namespace WhichData
             m_activeView.DisableScreenMessage();
         }
 
-        public void EndExternMove()
+        public void EndCollectMove()
         {
             m_externShip.ResetData(); //better to purge the model than leave it full of old state
             m_externSelectedPages.Clear();
@@ -477,6 +479,14 @@ namespace WhichData
             m_externView.ResetData();
 
             m_externCollectContainer = null; //double duty to share the method
+
+            m_activeShip.FireScienceEvent(); //pump the active model
+
+            m_state = State.Daemon;
+        }
+
+        public void EndStoreMove()
+        {
             m_externStoreContainer = null;
 
             m_activeShip.FireScienceEvent(); //pump the active model
@@ -507,6 +517,25 @@ namespace WhichData
             selectedPages.AddRange(toReview);
             m_selectedDirty[index] = true;
             m_guiViews[index].Select(selectedPages);
+        }
+
+        public string GetHeaderString()
+        {
+            string header = string.Empty;
+            switch (m_state)
+            {
+                case State.Review:
+                    return "Reviewing " + m_activeShip.GetShipString() + m_activeShip.GetStatusString();
+                case State.Collect:
+                    return "Take from " + m_externShip.GetShipString();
+                case State.Store:
+                    return "Store to " + ShipModel.ShipString(m_externStoreContainer.vessel); //no extern model in Store
+                case State.Daemon:
+                case State.Picker:
+                default:
+                    Debug.Log("GA controller ERROR uncaught case in GetHeaderString");
+                    return null;
+            }
         }
 
         public void LaunchCoroutine( IEnumerator routine ) { StartCoroutine(routine); }
