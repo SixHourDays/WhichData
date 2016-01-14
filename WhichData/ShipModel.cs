@@ -152,7 +152,6 @@ namespace WhichData
         //generic arg handlers
         public void OnShipEvent<T>(T arg) { m_partEventOccured = true; }
         public void OnCrewEvent<T>(T arg) { m_crewEventOccured = true; }
-        public void OnEvaScienceMove() { m_scienceEventOccured = true; }
         //notable handlers
         private ScienceData m_deployedResult = null; //check against this later in scandata
         public void OnScienceEvent(ScienceData result) { m_deployedResult = result; m_scienceEventOccured = true; }
@@ -202,6 +201,7 @@ namespace WhichData
             public bool scienceDatasDirty { get; set; }
             public List<DataPage> newScienceDatas { get; set; }
             public List<DataPage> lostScienceDatas { get; set; }
+            public bool habitablePartsDirty { get; set; }
             public bool crewDirty { get; set; }
             public Flags()
             {
@@ -211,7 +211,7 @@ namespace WhichData
             }
             public void Clear()
             {
-                experimentDeployed = sciDataModulesDirty = labModulesDirty = radioModulesDirty = scienceDatasDirty = crewDirty = false;
+                experimentDeployed = sciDataModulesDirty = labModulesDirty = radioModulesDirty = scienceDatasDirty = habitablePartsDirty = crewDirty = false;
                 newScienceDatas.Clear(); lostScienceDatas.Clear();
             }
         }
@@ -237,8 +237,11 @@ namespace WhichData
         //ship lab research subjects flattened
         public List<string> m_researchIDs = new List<string>();
 
-        //crew
-        //TODOJEFFGIFFEN
+        //parts that accomodate kerbals
+        public List<Part> m_habitableParts = new List<Part>();
+        //crew flattened
+        public List<ProtoCrewMember> m_crewMembers = new List<ProtoCrewMember>();
+        public bool m_scientistAboard = false;
 
         private void ScanParts()
         {
@@ -271,6 +274,13 @@ namespace WhichData
             {
                 m_flags.radioModulesDirty = true;
                 m_radioModules = radioModules; //deliberate ref swap
+            }
+
+            List<Part> habitableParts = m_ship.parts.FindAll(p => p.CrewCapacity > 0);
+            if ( !habitableParts.SequenceEqual(m_habitableParts))
+            {
+                m_flags.habitablePartsDirty = true;
+                m_habitableParts = habitableParts;
             }
         }
 
@@ -320,11 +330,14 @@ namespace WhichData
         private void ScanCrew()
         {
             Debug.Log("GA model" + m_index + " ScanCrew");
-            //TODOJEFFGIFFEN
-            if (false)
+
+            List<ProtoCrewMember> crewMembers = new List<ProtoCrewMember>();
+            m_habitableParts.ForEach(hp => crewMembers.AddRange(hp.protoModuleCrew));
+            if ( !crewMembers.SequenceEqual( m_crewMembers) )
             {
+                m_crewMembers = crewMembers;
+                m_scientistAboard = m_crewMembers.Exists(c => c.experienceTrait.TypeName == "Scientist");
                 m_flags.crewDirty = true;
-                //...
             }
         }
 
@@ -402,8 +415,9 @@ namespace WhichData
 
         //async discard 
         DataProcessor m_discardDataQueue;
-        public void ProcessDiscardDatas(List<DataPage> discards)
+        public void ProcessDiscardDatas(List<DataPage> discards, Action endStep)
         {
+            m_discardDataQueue.m_end4 = endStep; //allows us to use custom callbacks
             //remove data from parts
             //move step 1:
             //do this here to remove n data in 1 frame (using the DataProcessor hooks it would take n frames)
@@ -700,8 +714,11 @@ namespace WhichData
             m_radioModules.Clear();
             m_scienceDatas.Clear();
             m_researchIDs.Clear();
+            m_habitableParts.Clear();
+            m_crewMembers.Clear();
+            m_scientistAboard = false;
 
-            m_partEventOccured = m_crewEventOccured = m_scienceEventOccured = false;
+        m_partEventOccured = m_crewEventOccured = m_scienceEventOccured = false;
             m_flags.Clear();
 
             m_ship = null;

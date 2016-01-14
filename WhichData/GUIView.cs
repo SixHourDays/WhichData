@@ -140,7 +140,7 @@ namespace WhichData
         //window pixel positions etc
         //default window in 1920x1080 is at 243, 190, 413x240 (10px of grey round thinger at left)
         //500px of list pane, 413 of info pane ( -10 left grey thing -9 fat left pad of info. y+60 for 'all' button height //HACKJEFFGIFFEN
-        public Rect m_window = new Rect(243, 190, 500 + 394, 240 + 64);
+        static public Rect m_window = new Rect(243, 190, 500 + 394, 240 + 64); //static so windows *share* position and size
         public Rect m_listPaneRect = new Rect(6, 6, 500 - 6 * 2, 240 + 64 - 6 * 2); //y origin is m_padding really
         public int m_listFieldMaxHeight = 22;  //height of each list row. min be 18, helps with click probability some
 
@@ -294,6 +294,7 @@ namespace WhichData
             switch (m_controller.m_state)
             {
                 case WhichData.State.Review:
+                case WhichData.State.ExternReview:
                 case WhichData.State.Collect:
                 case WhichData.State.Store:
                     if (m_showUI)
@@ -360,7 +361,7 @@ namespace WhichData
             GUILayout.BeginHorizontal();
             {
                 //experi, rec sci/%max, trns sci/%max, lab pts, data mits, biome, sit, body
-                float fieldWidth = (m_listPaneRect.width - 37) / m_sortFields.Count; //HACKJEFFGIFFEN accomodate pads
+                float fieldWidth = (m_listPaneRect.width - 37) / m_sortFields.Count; //HACKJEFFGIFFEN shorten up to accomodate pads
                 //sorter toggles
                 foreach (SortField sf in m_sortFields)
                 {

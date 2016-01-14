@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections;
 using System.Collections.Generic;
+using System.Linq;
 using UnityEngine;
 
 namespace WhichData
@@ -90,16 +91,13 @@ namespace WhichData
             }
         }
 
-        //only active
-        public IScienceDataContainer m_reviewContainer = null;
-        //only extern
-        public bool m_evaOutOfRange = false; //will cancel any of the following
+        public List<Func<bool>> m_rightClickEvents = new List<Func<bool>>();
+        public bool m_reviewEvent = false;
         public bool m_externCollectEvent = false;
-        public ModuleScienceContainer m_externCollectContainer = null;
         public bool m_externStoreEvent = false;
-        public ModuleScienceContainer m_externStoreContainer = null;
-        //only needed to prompt the extern vessel switch
-        public ModuleScienceExperiment m_externDeployExperi = null;
+        public bool m_externDeployEvent = false;
+        public PartModule m_dialogModule = null; //track what container was rmb
+        public float m_dialogSqrRange = 0f; //range to close on in externDeploy, collect, store
 
         public int m_blockedFrames = 0;
 
@@ -111,10 +109,11 @@ namespace WhichData
                 {
                     case State.Daemon: //the gui does stuff even when not drawing
                     case State.Picker: //these three states require our ship view
-                    case State.Review: //HACKJEFFGIFFEN what about review of *other* ship?
+                    case State.Review:
                     case State.Store:
                         m_activeView.OnGUI();
                         break;
+                    case State.ExternReview:
                     case State.Collect: //this requires external ship view
                         m_externView.OnGUI();
                         break;
@@ -135,6 +134,7 @@ namespace WhichData
         {
             Daemon, //the default.  minimized
             Review, //new science / review of onboard science
+            ExternReview, //new extern science
             Picker, //picking a glowing destination for onboard science moves
             Collect,//right clicked is source, eva kerbal is dst, all actions are disabled except move
             Store,  //eva kerbal is src, right clicked is dst, all actions are disabled except move
@@ -172,15 +172,22 @@ namespace WhichData
                 m_activeShip.SwitchVessel(FlightGlobals.ActiveVessel);
                 //model generates diff of the whole vessel
                 //data propagation clears our selected, cleans the view, populating w new data
-                m_externCollectEvent = m_externStoreEvent = false;
-                m_reviewContainer = m_externCollectContainer = m_externStoreContainer = null;
-                m_externDeployExperi = null;
+                m_reviewEvent = m_externCollectEvent = m_externStoreEvent = m_externDeployEvent = false;
+                m_dialogModule = null;
+                m_rightClickEvents.Clear();
             }
             else
             {
+                //these events can set the extern flags below
+                //any right clicks the module takes a few frames to do, we poll for here
+                while( m_rightClickEvents.Count > 0 && m_rightClickEvents[0]() )
+                {
+                    m_rightClickEvents.RemoveAt(0);
+                }
+
                 Vessel newExternVessel = null;
-                if (m_externCollectEvent) { newExternVessel = m_externCollectContainer.vessel; }
-                if (m_externDeployExperi) { newExternVessel = m_externDeployExperi.vessel; }
+                if (m_externCollectEvent) { newExternVessel = m_dialogModule.vessel; }
+                if (m_externDeployEvent) { newExternVessel = m_dialogModule.vessel; }
                 if (newExternVessel)
                 {
                     Debug.Log("GA controller extern vesel switch");
@@ -205,18 +212,19 @@ namespace WhichData
                 Review(Active, m_activeShip.m_flags.newScienceDatas); //new experiments become the selection
                 SwitchState(State.Review);
             }
-            else if (m_reviewContainer != null)
+            else if (m_reviewEvent)
             {
                 Debug.Log("GA controller REVIEW DATA");
-                Review(Active, m_activeShip.GetContainerPages(m_reviewContainer)); //right clicked container's datas becomes selection
+                Review(Active, m_activeShip.GetContainerPages(m_dialogModule as IScienceDataContainer)); //right clicked container's datas becomes selection
                 SwitchState(State.Review);
-                m_reviewContainer = null;
+                m_dialogModule = null;
+                m_reviewEvent = false;
             }
             else if (m_externCollectEvent)
             {
                 Debug.Log("GA controller COLLECT DATA");
                 //highlight the right click part's sum data - container & experi modules
-                Review(Extern, m_externShip.GetPartPages(m_externCollectContainer.part));
+                Review(Extern, m_externShip.GetPartPages(m_dialogModule.part));
                 m_externCollectEvent = false;
                 SwitchState(State.Collect);
             }
@@ -228,19 +236,41 @@ namespace WhichData
                 m_externStoreEvent = false;
                 SwitchState(State.Store);
             }
+            else if (m_externDeployEvent)
+            {
+                Debug.Log("GA controller EXTERN DEPLOY");
+                Review(Extern, m_externShip.GetContainerPages(m_dialogModule as ModuleScienceExperiment)); //new external experiment becomes selection
+                m_externDeployEvent = false;
+                SwitchState(State.ExternReview);
+            }
             else //cases where we go back to daemon
             {
                 //OR together reasons to close here:
                 bool close = false;
 
                 //when eva kerb floats too far from Collect/Store part
-                close |= m_evaOutOfRange;
-                m_evaOutOfRange = false;
+                if (m_dialogModule != null) //review case nulled out by handler above.  just externDeploy, collect, store
+                {
+                    Vector3 offsetToShip = m_dialogModule.part.transform.position - FlightGlobals.ActiveVessel.transform.position;
+                    float sqrDst = offsetToShip.sqrMagnitude;
+                    close |= sqrDst > m_dialogSqrRange;
+                }
 
                 //when ship loses its last data, so we've nothing to display
-                //HACKJEFFGIFFEN shitty state check
-                close |= (m_state == State.Collect ? m_externShip : m_activeShip).m_scienceDatas.Count == 0;
-                
+                switch (m_state)
+                {
+                    case State.Daemon:
+                    case State.Picker:
+                    case State.Review:
+                    case State.Store:
+                        close |= m_activeShip.m_scienceDatas.Count == 0;
+                        break;
+                    case State.ExternReview:
+                    case State.Collect:
+                        close |= m_externShip.m_scienceDatas.Count == 0;
+                        break;
+                }
+
                 if (close)
                 {
                     SwitchState(State.Daemon);
@@ -296,7 +326,7 @@ namespace WhichData
                     //TODOJEFFGIFFEN should use reset on showReset bool
                     if (m_activeView.discardBtn && m_discardEnabled)
                     {
-                        m_activeShip.ProcessDiscardDatas(m_activeSelectedPages);
+                        m_activeShip.ProcessDiscardDatas(m_activeSelectedPages, m_activeShip.FireScienceEvent);
                     }
 
                     //move btn
@@ -369,13 +399,14 @@ namespace WhichData
 
                         break;
                     }
+                case State.ExternReview:
                 case State.Collect:
                     //kerb icon
-                    UpdateExternMove(Extern, m_activeShip.m_containerModules[0], EndCollectMove); //active ship is eva kerb, our dst
+                    UpdateExternMove(Extern, m_activeShip.m_containerModules[0], CollectEnd); //active ship is eva kerb, our dst
                     break;
                 case State.Store:
                     //pod icon
-                    UpdateExternMove(Active, m_externStoreContainer, EndStoreMove); //right clicked part is dst
+                    UpdateExternMove(Active, m_dialogModule as ModuleScienceContainer, StoreEnd); //right clicked part is dst
                     break;
                 case State.Daemon:
                 {
@@ -411,10 +442,11 @@ namespace WhichData
 
                 //knowing dst up front, we can screen for repeats wrt container
                 if (dst.allowRepeatedSubjects) { m_moveEnabled = true; }
-                else { m_moveEnabled = selection.FindAll(dp => !dst.HasData(dp.m_scienceData)).Count > 0; }
-                
-                //in collect mode, we only allow data move.
-                m_discardEnabled = m_labEnabled = m_transEnabled = false;
+                else { m_moveEnabled = selection.Exists(dp => !dst.HasData(dp.m_scienceData)); }
+                //scientists can additionally use discard
+                m_discardEnabled = m_activeShip.m_scientistAboard;
+                //in collect mode, we disallow lab and transmit
+                m_labEnabled = m_transEnabled = false;
 
                 //locks as told, and clears view dirty select flag
                 view.SetViewInfo(m_discardEnabled, m_moveEnabled, m_labEnabled, m_transEnabled);
@@ -424,7 +456,14 @@ namespace WhichData
             //action button handling
             if (view.closeBtn)
             {
-                endFunc();
+                CloseDialog();
+            }
+
+            //TODOJEFFGIFFEN should use reset on showReset bool
+            if (view.discardBtn && m_discardEnabled)
+            {
+                m_shipModels[i].ProcessDiscardDatas(selection, ExternDiscardEnd);
+                CloseDialog();
             }
 
             //move btn
@@ -434,6 +473,7 @@ namespace WhichData
                 if (!dst.allowRepeatedSubjects) { selection.RemoveAll(dp => dst.HasData(dp.m_scienceData)); }
 
                 m_shipModels[i].ProcessMoveDatas(dst, selection, endFunc);
+                CloseDialog();
             }
         }
 
@@ -447,10 +487,12 @@ namespace WhichData
                         EndPicking();
                         break;
                     case State.Collect:
-                        EndCollectMove();
-                        break;
                     case State.Store:
-                        EndStoreMove();
+                    case State.ExternReview:
+                        //they all share the dialog module...going elsewhere should clear it
+                        if (newState != State.Collect
+                            && newState != State.Store
+                            && newState != State.ExternReview) { m_dialogModule = null; m_rightClickEvents.Clear();}
                         break;
                     case State.Daemon:
                     case State.Review:
@@ -471,27 +513,34 @@ namespace WhichData
             m_activeView.DisableScreenMessage();
         }
 
-        public void EndCollectMove()
+        private void ResetExtern()
         {
             m_externShip.ResetData(); //better to purge the model than leave it full of old state
             m_externSelectedPages.Clear();
             m_externSelectedDirty = false;
             m_externView.ResetData();
-
-            m_externCollectContainer = null; //double duty to share the method
-
-            m_activeShip.FireScienceEvent(); //pump the active model
-
+        }
+        public void CloseDialog()
+        {
+            m_dialogModule = null;
+            m_rightClickEvents.Clear();
             m_state = State.Daemon;
         }
 
-        public void EndStoreMove()
+        public void CollectEnd()
         {
-            m_externStoreContainer = null;
-
+            ResetExtern();
             m_activeShip.FireScienceEvent(); //pump the active model
+        }
 
-            m_state = State.Daemon;
+        public void StoreEnd()
+        {
+            m_activeShip.FireScienceEvent(); //pump the active model
+        }
+
+        public void ExternDiscardEnd()
+        {
+            ResetExtern();
         }
 
         public void DeltaData(int i)
@@ -521,15 +570,16 @@ namespace WhichData
 
         public string GetHeaderString()
         {
-            string header = string.Empty;
             switch (m_state)
             {
                 case State.Review:
                     return "Reviewing " + m_activeShip.GetShipString() + m_activeShip.GetStatusString();
+                case State.ExternReview:
+                    return "Reviewing " + m_externShip.GetShipString() + m_externShip.GetStatusString();
                 case State.Collect:
                     return "Take from " + m_externShip.GetShipString();
                 case State.Store:
-                    return "Store to " + ShipModel.ShipString(m_externStoreContainer.vessel); //no extern model in Store
+                    return "Store to " + ShipModel.ShipString(m_dialogModule.vessel); //no extern model in Store
                 case State.Daemon:
                 case State.Picker:
                 default:
@@ -540,38 +590,95 @@ namespace WhichData
 
         public void LaunchCoroutine( IEnumerator routine ) { StartCoroutine(routine); }
 
-        public void OnEvaScienceMove()
+
+        public void OnPMEvaScientistDeploy(ModuleScienceExperiment experi, float sqrRange)
         {
-            //wholesale take/store needn't set the external model, just update active eva kerb
-            m_activeShip.OnEvaScienceMove();
+            //validate the event, helper fires for all kerb professions
+            if (!m_activeShip.m_scientistAboard) { return; }
+
+            //condition to meet before we signal controller
+            Func<bool> pollForDeploy = () => //experi and sqrRange get captured into the delegate
+            {
+                //wait for module deploy
+                if (experi.GetData().Length == 0) { return false; }
+                    
+                //spawn dialog
+                m_dialogModule = experi;
+                m_dialogSqrRange = sqrRange;
+                m_externDeployEvent = true;
+
+                return true;
+            };
+
+            m_rightClickEvents.Add(pollForDeploy);
         }
 
-        public void OnEVAOutOfRange(ModuleScienceContainer container)
+        private void PMReset(ModuleScienceExperiment experi, ShipModel ship)
         {
-            //check whats current so chained dialogs dont have old out-of-range events close new dialogs
-            if (m_externCollectContainer == container || m_externStoreContainer == container)
+            //condition to meet before we signal controller
+            Func<bool> pollForReset = () => //experi get captured into the delegate
             {
-                m_evaOutOfRange = true;
-            }
+                //wait for module to reset
+                if (experi.GetData().Length > 0) { return false; }
+
+                //alert model
+                ship.FireScienceEvent();
+                return true;
+            };
+
+            m_rightClickEvents.Add(pollForReset);
         }
+
+        //onboard reset via part rigth click
+        public void OnPMReset(ModuleScienceExperiment experi)
+        {
+            PMReset(experi, m_activeShip);
+        }
+        //eva scientist reset via part right click
+        public void OnPMEvaScientistReset(ModuleScienceExperiment experi)
+        {
+            //validate the event, helper fires for all kerbs
+            if (m_activeShip.m_scientistAboard) { PMReset(experi, m_externShip); }
+        }
+
+        public void OnPMEvaCollectStore(IScienceDataContainer cont, int origDataCount)
+        {
+            //condition to meet before we signal controller
+            Func<bool> pollForMove = () => //cont get captured into the delegate
+            {
+                //wait for module to collect or store
+                if (cont.GetData().Length == origDataCount) { return false; }
+
+                //alert models
+                m_activeShip.FireScienceEvent();
+                m_externShip.FireScienceEvent();
+                return true;
+            };
+
+            m_rightClickEvents.Add(pollForMove);
+        }
+
 
         //only from external containers - experis offer only Take All (1)
-        public void OnCollectWhichData(ModuleScienceContainer container)
+        public void OnPMEvaCollectWhichData(ModuleScienceContainer container, float sqrRange)
         {
-            m_externCollectContainer = container;
+            m_dialogModule = container;
+            m_dialogSqrRange = sqrRange;
             m_externCollectEvent = true;
         }
 
-        //potentially from active ship containers or experis
-        public void OnReviewData(IScienceDataContainer container)
+        //only from active ship containers or experis - no range as active
+        public void OnPMReviewData(PartModule container)
         {
-            m_reviewContainer = container;
+            m_dialogModule = container;
+            m_reviewEvent = true;
         }
 
         //only external containers allow store
-        public void OnStoreWhichData(ModuleScienceContainer container)
+        public void OnPMEvaStoreWhichData(ModuleScienceContainer container, float sqrRange)
         {
-            m_externStoreContainer = container;
+            m_dialogModule = container;
+            m_dialogSqrRange = sqrRange;
             m_externStoreEvent = true;
         }
 
