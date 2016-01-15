@@ -204,6 +204,12 @@ namespace WhichData
                 //prunes our selection lists, propagates model data to view
                 DeltaData(i);
             }
+            //active ship only updates
+            if(m_activeShip.m_flags.scienceDatasDirty)
+            {
+                int experiDataCount = m_activeShip.m_experiModules.Sum(e => e.GetData().Length);
+                m_gatherDesc = "Gather (" + m_activeShip.m_experiDataCount + ") to here";
+            }
 
             //need to listen for deploy, review, and take/store, at all times
             if (m_activeShip.m_flags.experimentDeployed)
@@ -567,6 +573,19 @@ namespace WhichData
             m_selectedDirty[index] = true;
             m_guiViews[index].Select(selectedPages);
         }
+
+        public string m_gatherDesc;
+        //when experis have data to gather, and we're not on eva
+        public bool gatherEnabled { get { return m_activeShip.m_experiDataCount > 0 && !m_activeShip.m_ship.isEVA; } }
+
+        public void OnPMGatherData(ModuleScienceContainer cont)
+        {
+            //parts we want data of
+            List<Part> experiParts = m_activeShip.m_experiModules.ConvertAll(em => em.part);
+            List<DataPage> experiPages = m_activeShip.m_scienceDatas.FindAll(dp => experiParts.Remove(dp.m_partModule.part));
+            m_activeShip.ProcessMoveDatas(cont, experiPages, m_activeShip.MoveEnd);
+        }
+
 
         public string GetHeaderString()
         {

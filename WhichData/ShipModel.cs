@@ -236,6 +236,8 @@ namespace WhichData
         public List<DataPage> m_scienceDatas = new List<DataPage>();
         //ship lab research subjects flattened
         public List<string> m_researchIDs = new List<string>();
+        //experi meta datas
+        public int m_experiDataCount;
 
         //parts that accomodate kerbals
         public List<Part> m_habitableParts = new List<Part>();
@@ -315,6 +317,9 @@ namespace WhichData
                     m_flags.experimentDeployed = true;
                 }
                 m_deployedResult = null;
+
+                //how much data is in only the experiments
+                m_experiDataCount = m_experiModules.Sum(e=>e.GetData().Length);
             }
 
             //the labs researched subjects alter the worth of the science datas

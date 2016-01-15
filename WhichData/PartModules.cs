@@ -175,6 +175,7 @@ namespace WhichData
 
         public BaseEvent m_wrapStore;
 
+        public BaseEvent m_gather;
         public BaseEvent m_collect;
         public BaseEvent m_store;
 
@@ -190,6 +191,7 @@ namespace WhichData
 
             m_wrapStore = Events["ExternStoreWrapper"];
 
+            m_gather = Events["GatherData"];
             m_collect = Events["ExternCollectWhichData"];
             m_store = Events["ExternStoreWhichData"];
 
@@ -205,7 +207,12 @@ namespace WhichData
             if (vessel.isEVA) { m_store.guiName = "Give Which Data..."; }
         }
 
-        //HACKJEFFGIFFEN the radius needs to be per part
+        [KSPEvent(guiActive = true)]
+        public void GatherData()
+        {
+            WhichData.instance.OnPMGatherData(m_module);
+        }
+
         [KSPEvent(guiName = "Take Which Data...", guiActiveUnfocused = true)]
         public void ExternCollectWhichData()
         {
@@ -241,6 +248,9 @@ namespace WhichData
             m_wrapCollect.guiName = m_stockCollect.GUIName;
             m_wrapStore.guiName = m_stockStore.GUIName;
             m_review.guiName = m_stockReview.GUIName;
+
+            m_gather.active = WhichData.instance.gatherEnabled;
+            m_gather.guiName = WhichData.instance.m_gatherDesc;
         }
     }
 }

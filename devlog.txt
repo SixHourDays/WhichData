@@ -57,9 +57,11 @@ listen for reset to clear a data
 listen for crew board/eva do alter the scientist clean right click menu
 decided scientists alone can discard while take/store, and take while keeping/discarding result.
 synced active and extern views in window space
-
+gather right-click for pod, when any exp has data in it
 
 doing:
+
+clean right-click for pod, when any exp is spent & scientist is aboard
 animate view to scroll to off-window hard selects!
 deal with the shutdown mid-copy thing
 check/solve the multiple copies in lab scenario
@@ -79,8 +81,6 @@ todo:
 prompt about partial selection no-ops..silent is bad
 update group text for when move / lab / radio is disabled
 more sorts: container
-gather right-click for pod, when any exp has data in it
-clean right-click for pod, when any exp is spent & scientist is aboard
 save selected state & position to ship file
 
 Why the ExperimentResultDialog isn't good enough:
