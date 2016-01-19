@@ -204,11 +204,14 @@ namespace WhichData
                 //prunes our selection lists, propagates model data to view
                 DeltaData(i);
             }
-            //active ship only updates
-            if(m_activeShip.m_flags.scienceDatasDirty)
+            //active-ship-only updates
+            if (m_activeShip.m_flags.scienceDatasDirty)
             {
-                int experiDataCount = m_activeShip.m_experiModules.Sum(e => e.GetData().Length);
-                m_gatherDesc = "Gather (" + m_activeShip.m_experiDataCount + ") to here";
+                m_gatherDesc = "Gather Data Here (" + m_activeShip.m_experiScienceDatas.Count + ")";
+            }
+            if (m_activeShip.m_flags.disabledExperisDirty)
+            {
+                m_cleanDesc = "Clean Experiments (" + m_activeShip.m_disabledExperiModules.Count + ")";
             }
 
             //need to listen for deploy, review, and take/store, at all times
@@ -576,16 +579,27 @@ namespace WhichData
 
         public string m_gatherDesc;
         //when experis have data to gather, and we're not on eva
-        public bool gatherEnabled { get { return m_activeShip.m_experiDataCount > 0 && !m_activeShip.m_ship.isEVA; } }
+        public bool gatherEnabled { get { return m_activeShip.m_experiScienceDatas.Count > 0 && !m_activeShip.m_ship.isEVA; } }
 
         public void OnPMGatherData(ModuleScienceContainer cont)
         {
-            //parts we want data of
-            List<Part> experiParts = m_activeShip.m_experiModules.ConvertAll(em => em.part);
-            List<DataPage> experiPages = m_activeShip.m_scienceDatas.FindAll(dp => experiParts.Remove(dp.m_partModule.part));
-            m_activeShip.ProcessMoveDatas(cont, experiPages, m_activeShip.MoveEnd);
+            //HACKJEFFGIFFEN should note silent fails here
+            List<DataPage> moveable = new List<DataPage>();
+            //partial selection: discard repeats wrt container
+            if (cont.allowRepeatedSubjects) { moveable.AddRange(m_activeShip.m_experiScienceDatas); }
+            else { moveable = m_activeShip.m_experiScienceDatas.FindAll(dp => !cont.HasData(dp.m_scienceData)); }
+
+            m_activeShip.ProcessMoveDatas(cont, moveable, m_activeShip.MoveEnd);
         }
 
+        public string m_cleanDesc;
+        //when there are disabled experis and we have a scientist (part module takes care of disabling lab case)
+        public bool cleanEnabled { get { return m_activeShip.m_disabledExperiModules.Count > 0 && m_activeShip.m_scientistAboard; } }
+
+        public void OnPMCleanExperis()
+        {
+            m_activeShip.ProcessCleanDatas(m_activeShip.m_disabledExperiModules);
+        }
 
         public string GetHeaderString()
         {

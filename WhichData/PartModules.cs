@@ -176,6 +176,8 @@ namespace WhichData
         public BaseEvent m_wrapStore;
 
         public BaseEvent m_gather;
+        public BaseEvent m_clean;
+        bool m_hasLabModule = false;
         public BaseEvent m_collect;
         public BaseEvent m_store;
 
@@ -187,11 +189,15 @@ namespace WhichData
 
             //Debug.Log("GA Container Helper " + pairIndex + "/" + helpers.Count + " for " + m_container.name);
 
+            //labs provide clean already.  otherwise, we can
+            m_hasLabModule = part.FindModuleImplementing<ModuleScienceLab>() != null;
+            
             m_stockStore = m_module.Events["StoreDataExternalEvent"];
 
             m_wrapStore = Events["ExternStoreWrapper"];
 
             m_gather = Events["GatherData"];
+            m_clean = Events["CleanExperis"];
             m_collect = Events["ExternCollectWhichData"];
             m_store = Events["ExternStoreWhichData"];
 
@@ -211,6 +217,12 @@ namespace WhichData
         public void GatherData()
         {
             WhichData.instance.OnPMGatherData(m_module);
+        }
+
+        [KSPEvent(guiActive = true)]
+        public void CleanExperis()
+        {
+            WhichData.instance.OnPMCleanExperis();
         }
 
         [KSPEvent(guiName = "Take Which Data...", guiActiveUnfocused = true)]
@@ -251,6 +263,10 @@ namespace WhichData
 
             m_gather.active = WhichData.instance.gatherEnabled;
             m_gather.guiName = WhichData.instance.m_gatherDesc;
+
+            //if we have a sibling lab PartModule, dont double provide clean
+            m_clean.active = !m_hasLabModule && WhichData.instance.cleanEnabled;
+            m_clean.guiName = WhichData.instance.m_cleanDesc;
         }
     }
 }

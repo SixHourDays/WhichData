@@ -201,6 +201,7 @@ namespace WhichData
             public bool scienceDatasDirty { get; set; }
             public List<DataPage> newScienceDatas { get; set; }
             public List<DataPage> lostScienceDatas { get; set; }
+            public bool disabledExperisDirty { get; set; }
             public bool habitablePartsDirty { get; set; }
             public bool crewDirty { get; set; }
             public Flags()
@@ -211,7 +212,7 @@ namespace WhichData
             }
             public void Clear()
             {
-                experimentDeployed = sciDataModulesDirty = labModulesDirty = radioModulesDirty = scienceDatasDirty = habitablePartsDirty = crewDirty = false;
+                experimentDeployed = sciDataModulesDirty = labModulesDirty = radioModulesDirty = scienceDatasDirty = disabledExperisDirty = habitablePartsDirty = crewDirty = false;
                 newScienceDatas.Clear(); lostScienceDatas.Clear();
             }
         }
@@ -227,6 +228,8 @@ namespace WhichData
         //sciDataModules split into experiments and containers
         public List<ModuleScienceExperiment> m_experiModules = new List<ModuleScienceExperiment>();
         public List<ModuleScienceContainer> m_containerModules = new List<ModuleScienceContainer>();
+        //sciDataModules that are inert (needing reset)
+        public List<ModuleScienceExperiment> m_disabledExperiModules = new List<ModuleScienceExperiment>();
 
         //labs and radios
         public List<ModuleScienceLab> m_labModules = new List<ModuleScienceLab>();
@@ -236,8 +239,8 @@ namespace WhichData
         public List<DataPage> m_scienceDatas = new List<DataPage>();
         //ship lab research subjects flattened
         public List<string> m_researchIDs = new List<string>();
-        //experi meta datas
-        public int m_experiDataCount;
+        //experi-only science data flattened
+        public List<DataPage> m_experiScienceDatas = new List<DataPage>();
 
         //parts that accomodate kerbals
         public List<Part> m_habitableParts = new List<Part>();
@@ -318,8 +321,16 @@ namespace WhichData
                 }
                 m_deployedResult = null;
 
-                //how much data is in only the experiments
-                m_experiDataCount = m_experiModules.Sum(e=>e.GetData().Length);
+                //list of science data in the experiments (not the containers)
+                m_experiScienceDatas = m_scienceDatas.FindAll(dp => dp.m_isExperi);
+            }
+
+            //list of the inoperable experis (reset case doesn't actuall have a ScienceData change)
+            List<ModuleScienceExperiment> disabledExperis = m_experiModules.FindAll(e => e.Inoperable);
+            if (!disabledExperis.SequenceEqual(m_disabledExperiModules))
+            {
+                m_flags.disabledExperisDirty = true;
+                m_disabledExperiModules = disabledExperis;
             }
 
             //the labs researched subjects alter the worth of the science datas
@@ -361,17 +372,17 @@ namespace WhichData
         int m_index;
 
 
-        class DataProcessor
+        class DataProcessor<T> where T : class
         {
-            public List<DataPage> m_queue = new List<DataPage>();
-            Action<DataPage> m_step1;
-            Func<DataPage, bool> m_poll2;
-            Action<DataPage> m_step3;
+            public List<T> m_queue = new List<T>();
+            Action<T> m_step1;
+            Func<T, bool> m_poll2;
+            Action<T> m_step3;
             public Action m_end4;
 
             bool m_polling = false;
 
-            public DataProcessor(Action<DataPage> step1, Func<DataPage, bool> poll2, Action<DataPage> step3, Action end)
+            public DataProcessor(Action<T> step1, Func<T, bool> poll2, Action<T> step3, Action end)
             {
                 m_step1 = step1;
                 m_poll2 = poll2;
@@ -379,7 +390,7 @@ namespace WhichData
                 m_end4 = end;
             }
 
-            public void Process(List<DataPage> datas)
+            public void Process(List<T> datas)
             {
                 m_queue.AddRange(datas);
             }
@@ -388,7 +399,7 @@ namespace WhichData
             {
                 while (m_queue.Count > 0)
                 {
-                    DataPage dp = m_queue.First();
+                    T dp = m_queue.First();
 
                     //step1 called once
                     if (!m_polling)
@@ -418,8 +429,55 @@ namespace WhichData
             }
         }
 
+        //async clean
+        DataProcessor<ModuleScienceExperiment> m_cleanDataQueue;
+        ScreenMessage m_scrnMsg = null;
+        public void ProcessCleanDatas(List<ModuleScienceExperiment> cleans)
+        {
+            //want to work in series, even on step 1
+            m_cleanDataQueue.Process(cleans);
+        }
+
+        const float m_cleanDuration = 10f; //timed off of real lab & goo
+        float m_cleanStartTime = 0f;
+        void CleanStart(ModuleScienceExperiment e)
+        {
+            m_cleanStartTime = (float)m_ship.missionTime;
+                                                         //muted lime green
+            m_scrnMsg = ScreenMessages.PostScreenMessage("<color=#60a000ff>Cleaning out <i>" + e.part.partInfo.title + "</i>... [XX%]</color>", m_cleanDuration, ScreenMessageStyle.UPPER_LEFT);
+        }
+        bool CleanPoll(ModuleScienceExperiment e)
+        {
+            if (m_ship.missionTime < m_cleanStartTime + m_cleanDuration)
+            {
+                //wait on hack timer (thanks ksp for yet another function that doesnt work)
+                float percDone = ((float)m_ship.missionTime - m_cleanStartTime) / m_cleanDuration;
+                int num = (int)(percDone * 100);
+                int percIndex = m_scrnMsg.message.Length - 12;
+                m_scrnMsg.message = m_scrnMsg.message.Remove(percIndex, 2).Insert(percIndex, num.ToString("D2"));
+                return false;
+            }
+            else if (m_cleanStartTime != 0f)
+            {
+                //complete, so cycle the container              //bright lime green
+                m_scrnMsg = ScreenMessages.PostScreenMessage("<color=#a0ff00ff><b>Clean out on <i>" + e.part.partInfo.title + "</i> complete.</b></color>", 2f, ScreenMessageStyle.UPPER_LEFT);
+                m_cleanStartTime = 0f;
+                e.ResetExperiment();
+                return false;
+            }
+            else
+            { return !e.Inoperable; }
+
+        }
+        void CleanEnd(ModuleScienceExperiment e)
+        {
+            ScreenMessages.RemoveMessage(m_scrnMsg);
+            FireScienceEvent();
+        }
+
+
         //async discard 
-        DataProcessor m_discardDataQueue;
+        DataProcessor<DataPage> m_discardDataQueue;
         public void ProcessDiscardDatas(List<DataPage> discards, Action endStep)
         {
             m_discardDataQueue.m_end4 = endStep; //allows us to use custom callbacks
@@ -508,7 +566,7 @@ namespace WhichData
 
 
         //async move
-        DataProcessor m_moveDataQueue;
+        DataProcessor<DataPage> m_moveDataQueue;
         ModuleScienceContainer m_moveDst = null;
         public void ProcessMoveDatas(ModuleScienceContainer dst, List<DataPage> sources, Action endStep)
         {
@@ -581,7 +639,7 @@ namespace WhichData
             return refValue * scalar * sciMultiplier;
         }
 
-        DataProcessor m_labDataQueue;
+        DataProcessor<DataPage> m_labDataQueue;
         public void ProcessLabDatas(List<DataPage> dataPages)
         {
             m_labDataQueue.Process(dataPages);
@@ -612,7 +670,7 @@ namespace WhichData
         //end queue - none
 
 
-        DataProcessor m_transmitDataQueue;
+        DataProcessor<DataPage> m_transmitDataQueue;
         public void ProcessTransmitDatas(List<DataPage> datas)
         {
             m_transmitDataQueue.Process(datas);
@@ -662,10 +720,11 @@ namespace WhichData
             m_controller = controller;
             m_index = i;
 
-            m_discardDataQueue = new DataProcessor(null, DiscardPoll, DiscardPost, FireScienceEvent);
-            m_moveDataQueue = new DataProcessor(null, DiscardPoll, MoveAdd, MoveEnd);
-            m_labDataQueue = new DataProcessor(LabStartCopy, LabIsDone, LabPostCopy, null);
-            m_transmitDataQueue = new DataProcessor(TransmitSend, TransmitIsSent, TransmitDiscard, null);
+            m_cleanDataQueue = new DataProcessor<ModuleScienceExperiment>(CleanStart, CleanPoll, CleanEnd, null);
+            m_discardDataQueue = new DataProcessor<DataPage>(null, DiscardPoll, DiscardPost, FireScienceEvent);
+            m_moveDataQueue = new DataProcessor<DataPage>(null, DiscardPoll, MoveAdd, MoveEnd);
+            m_labDataQueue = new DataProcessor<DataPage>(LabStartCopy, LabIsDone, LabPostCopy, null);
+            m_transmitDataQueue = new DataProcessor<DataPage>(TransmitSend, TransmitIsSent, TransmitDiscard, null);
 
 
             return errorMsg;
@@ -715,15 +774,17 @@ namespace WhichData
             m_sciDataModules.Clear();
             m_experiModules.Clear();
             m_containerModules.Clear();
+            m_disabledExperiModules.Clear();
             m_labModules.Clear();
             m_radioModules.Clear();
             m_scienceDatas.Clear();
             m_researchIDs.Clear();
+            m_experiScienceDatas.Clear();
             m_habitableParts.Clear();
             m_crewMembers.Clear();
             m_scientistAboard = false;
 
-        m_partEventOccured = m_crewEventOccured = m_scienceEventOccured = false;
+            m_partEventOccured = m_crewEventOccured = m_scienceEventOccured = false;
             m_flags.Clear();
 
             m_ship = null;
@@ -760,6 +821,7 @@ namespace WhichData
                 GameObject.Destroy(ExperimentsResultDialog.Instance.gameObject); //dead next frame
             }
 
+            m_cleanDataQueue.Update();
             m_discardDataQueue.Update();
             m_moveDataQueue.Update();
             m_labDataQueue.Update();
