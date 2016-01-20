@@ -59,6 +59,7 @@ decided scientists alone can discard while take/store, and take while keeping/di
 synced active and extern views in window space
 gather right-click for pod, when any exp has data in it
 clean right-click for pod, when any exp is spent & scientist is aboard
+prompts for partial selections and why they happen
 
 doing:
 animate view to scroll to off-window hard selects!
@@ -68,6 +69,7 @@ sciences going to R&D should also retrigger the dialogs...bar values will change
 dialog visually matches: so trans + next trans is 1px off.....
 
 bugs:
+take which then take all doesnt close, but leaves one hanging non-existant entry
 equals finds dupes of something in cont and experi it came from...host is relevant, as is host index
 take data reacts like science deploy...overzealous event handler in model
 spamming action buttons during queued work
@@ -77,7 +79,7 @@ doing move has highlighted that flat sci list isnt enough:
 control w no control!  hah
 
 todo:
-prompt about partial selection no-ops..silent is bad
+
 update group text for when move / lab / radio is disabled
 more sorts: container
 save selected state & position to ship file

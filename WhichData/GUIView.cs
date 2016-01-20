@@ -250,21 +250,6 @@ namespace WhichData
             return false;
         }
 
-        ScreenMessage m_scrnMsg = null;
-        public void SetScreenMessage(string msg)
-        {
-            DisableScreenMessage();
-            m_scrnMsg = ScreenMessages.PostScreenMessage(msg, 3600.0f, ScreenMessageStyle.UPPER_CENTER); //one hour, then screw it
-        }
-        public void DisableScreenMessage()
-        {
-            if (m_scrnMsg != null)
-            {
-                ScreenMessages.RemoveMessage(m_scrnMsg);
-                m_scrnMsg = null;
-            }
-        }
-
         WhichData m_controller;
         int m_index;
 

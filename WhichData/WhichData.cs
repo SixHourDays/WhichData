@@ -99,6 +99,18 @@ namespace WhichData
         public PartModule m_dialogModule = null; //track what container was rmb
         public float m_dialogSqrRange = 0f; //range to close on in externDeploy, collect, store
 
+        ScreenMessage m_scrnMsg = null; //used when we want to keep modifying a message, or kill at indeterminate time (like picking)
+        static public void WarnMessage(string msg)
+        {
+            //tangy orange
+            ScreenMessages.PostScreenMessage("<color=#ffa500ff>" + msg + "</color>", 4f, ScreenMessageStyle.UPPER_LEFT);
+        }
+        static public void NotifyMessage(string msg)
+        {
+            //muted lime green
+            ScreenMessages.PostScreenMessage("<color=#60a000ff>" + msg + "</color>", 4f, ScreenMessageStyle.UPPER_LEFT);
+        }
+
         public int m_blockedFrames = 0;
 
         public void OnGUI()
@@ -343,7 +355,7 @@ namespace WhichData
                     {
                         m_state = State.Picker;
                         m_activeShip.HighlightContainers(Color.cyan);
-                        m_activeView.SetScreenMessage("Choose where to move Data, click away to cancel");
+                        m_scrnMsg = ScreenMessages.PostScreenMessage("Choose where to move Data, click away to cancel", 3600.0f, ScreenMessageStyle.UPPER_CENTER); //one hour, then screw it
                     }
 
                     //lab button
@@ -351,6 +363,8 @@ namespace WhichData
                     {
                         //partial selection - reduce selection to labable datas
                         List<DataPage> labablePages = m_activeSelectedPages.FindAll(pg => pg.m_labPts > 0f);
+                        int skipped = m_activeSelectedPages.Count - labablePages.Count;
+                        if (skipped > 0) { NotifyMessage("Skipping " + skipped + " results that Lab already processed."); }
                         m_activeShip.ProcessLabDatas(labablePages);
                     }
 
@@ -390,8 +404,11 @@ namespace WhichData
 
                                     //partial selection: select src != dst (src == dst are effectively no-ops)
                                     List<DataPage> moveablePages = m_activeSelectedPages.FindAll(dp => dp.m_dataModule != dstCont);
+                                    int noOps = m_activeSelectedPages.Count - moveablePages.Count;
+                                    if (noOps > 0) { NotifyMessage("Skipping " + noOps + " results already in destination."); }
+
                                     //partial selection: discard repeats wrt container
-                                    if (!dst.allowRepeatedSubjects) { moveablePages.RemoveAll(dp => dst.HasData(dp.m_scienceData)); }
+                                    moveablePages = PruneDuplicates(dst, moveablePages);
 
                                     m_activeShip.ProcessMoveDatas(dst, moveablePages, m_activeShip.MoveEnd);
                                 }
@@ -479,7 +496,7 @@ namespace WhichData
             if (view.moveBtn && m_moveEnabled)
             {
                 //partial selection: discard repeats wrt container
-                if (!dst.allowRepeatedSubjects) { selection.RemoveAll(dp => dst.HasData(dp.m_scienceData)); }
+                selection = PruneDuplicates(dst, selection);
 
                 m_shipModels[i].ProcessMoveDatas(dst, selection, endFunc);
                 CloseDialog();
@@ -516,10 +533,21 @@ namespace WhichData
             }
         }
 
+        public List<DataPage> PruneDuplicates(ModuleScienceContainer dst, List<DataPage> pages)
+        {
+            //partial selection: discard repeats wrt container
+            if (!dst.allowRepeatedSubjects)
+            {
+                int duplicates = pages.RemoveAll(dp => dst.HasData(dp.m_scienceData));
+                if (duplicates > 0) { WarnMessage("Can't move " + duplicates + " results, identical ones in destination."); }
+            }
+            return pages;
+        }
+
         public void EndPicking()
         {
             m_activeShip.UnhighlightContainers();
-            m_activeView.DisableScreenMessage();
+            ScreenMessages.RemoveMessage(m_scrnMsg);
         }
 
         private void ResetExtern()
@@ -583,12 +611,12 @@ namespace WhichData
 
         public void OnPMGatherData(ModuleScienceContainer cont)
         {
-            //HACKJEFFGIFFEN should note silent fails here
             List<DataPage> moveable = new List<DataPage>();
-            //partial selection: discard repeats wrt container
-            if (cont.allowRepeatedSubjects) { moveable.AddRange(m_activeShip.m_experiScienceDatas); }
-            else { moveable = m_activeShip.m_experiScienceDatas.FindAll(dp => !cont.HasData(dp.m_scienceData)); }
+            moveable.AddRange(m_activeShip.m_experiScienceDatas);
 
+            //partial selection: discard repeats wrt container
+            moveable = PruneDuplicates(cont, moveable);
+           
             m_activeShip.ProcessMoveDatas(cont, moveable, m_activeShip.MoveEnd);
         }
 

@@ -222,7 +222,6 @@ namespace WhichData
         public Vessel m_ship = null;
 
         //ship pieces
-        //HACKJEFFGIFFEN accessors better, plus setting involves work
         public List<IScienceDataContainer> m_sciDataModules = new List<IScienceDataContainer>();
 
         //sciDataModules split into experiments and containers
@@ -444,7 +443,7 @@ namespace WhichData
         {
             m_cleanStartTime = (float)m_ship.missionTime;
                                                          //muted lime green
-            m_scrnMsg = ScreenMessages.PostScreenMessage("<color=#60a000ff>Cleaning out <i>" + e.part.partInfo.title + "</i>... [XX%]</color>", m_cleanDuration, ScreenMessageStyle.UPPER_LEFT);
+            m_scrnMsg = ScreenMessages.PostScreenMessage("<color=#60a000ff>Cleaning out <i>" + e.part.partInfo.title + "</i>... [XX%]</color>", 3600f, ScreenMessageStyle.UPPER_LEFT);
         }
         bool CleanPoll(ModuleScienceExperiment e)
         {
@@ -460,7 +459,7 @@ namespace WhichData
             else if (m_cleanStartTime != 0f)
             {
                 //complete, so cycle the container              //bright lime green
-                m_scrnMsg = ScreenMessages.PostScreenMessage("<color=#a0ff00ff><b>Clean out on <i>" + e.part.partInfo.title + "</i> complete.</b></color>", 2f, ScreenMessageStyle.UPPER_LEFT);
+                m_scrnMsg.message = "<color=#a0ff00ff><b>Clean out on <i>" + e.part.partInfo.title + "</i> complete.</b></color>";
                 m_cleanStartTime = 0f;
                 e.ResetExperiment();
                 return false;
@@ -472,6 +471,7 @@ namespace WhichData
         void CleanEnd(ModuleScienceExperiment e)
         {
             ScreenMessages.RemoveMessage(m_scrnMsg);
+            m_scrnMsg = null;
             FireScienceEvent();
         }
 
@@ -684,7 +684,7 @@ namespace WhichData
             Debug.Log("GA model" + m_index + " start transmit " + dp.m_scienceData.subjectID);
             m_radioModules.First().TransmitData(new List<ScienceData>() { dp.m_scienceData });
             m_transmitting = true;
-            //the callback version doesnt submit science, fires at start of antenna fold down
+            //the callback version no longer exists
             //polling IsBusy switches at end of fold down
             //so we temporarily subscribe to science recieve event as our poll2 step
             GameEvents.OnScienceRecieved.Add(KSPOnScienceRcv);
@@ -897,7 +897,6 @@ namespace WhichData
             Debug.Log("GA ensured helpers '" + ship.vesselName + "' " + report);
         }
 
-        //HACKJEFFGIFFEN
         static void ExploreClass(string typeName)
         {
             Debug.Log("GA ExploreClass " + typeName);
