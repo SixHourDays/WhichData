@@ -142,7 +142,7 @@ namespace WhichData
         //500px of list pane, 413 of info pane ( -10 left grey thing -9 fat left pad of info. y+60 for 'all' button height //HACKJEFFGIFFEN
         static public Rect m_window = new Rect(243, 190, 500 + 394, 240 + 64); //static so windows *share* position and size
         public Rect m_listPaneRect = new Rect(6, 6, 500 - 6 * 2, 240 + 64 - 6 * 2); //y origin is m_padding really
-        public int m_listFieldMaxHeight = 22;  //height of each list row. min be 18, helps with click probability some
+        public const int m_listFieldMaxHeight = 22;  //height of each list row. min be 18, helps with click probability some
 
         //state from ksp
         public GUIStyle m_styleRfText;
@@ -548,6 +548,36 @@ namespace WhichData
                     m_dirtyPages = false;
                 }
 
+                if (m_dirtySelection && m_selectedPages.Count > 0)
+                {   //if we're dirty before select logic, we've had a hard select
+                    const int listHeight = 224; //HACKJEFFGIFFEN //our list view is 224px tall
+                    const int listRowHeight = listHeight / m_listFieldMaxHeight;
+                    //snap the scroll bar so selectees are visible
+                    int index;
+                    if (m_selectedPages.Count == 1)
+                    {
+                        index = m_selectedPages.First().m_index;
+                    }
+                    else
+                    {
+                        //multiselect, find range of selection
+                        int min = m_selectedPages.Min(vp => vp.m_index);
+                        int max = m_selectedPages.Max(vp => vp.m_index);
+                        //window only shows so many rows
+                        if (max - min < listRowHeight)
+                        {   //when they will all fit, scroll to the middle of all selections
+                            index = (min + max) / 2;
+                        }
+                        else
+                        {   //when they cant all fit, do our best - set start of list to top of window
+                            index = min;
+                        }
+                    }
+                    float normPos = (float)index / m_viewPages.Count;
+                    //not perfect, 'slides' depending on how close we are to top or bottom.  but nice enough.
+                    //scrollpos ranges from 0 to entries * entryHeight - original window height
+                    m_scrollPos.y = (m_viewPages.Count * m_listFieldMaxHeight - listHeight) * normPos;
+                }
 
                 //list click handling
 

@@ -60,9 +60,9 @@ synced active and extern views in window space
 gather right-click for pod, when any exp has data in it
 clean right-click for pod, when any exp is spent & scientist is aboard
 prompts for partial selections and why they happen
+view snaps scroll to best fit of hard selections
 
 doing:
-animate view to scroll to off-window hard selects!
 deal with the shutdown mid-copy thing
 check/solve the multiple copies in lab scenario
 sciences going to R&D should also retrigger the dialogs...bar values will change
