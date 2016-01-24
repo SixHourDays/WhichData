@@ -605,7 +605,7 @@ namespace WhichData
             m_guiViews[index].Select(selectedPages);
         }
 
-        public string m_gatherDesc;
+        public string m_gatherDesc = ""; //partmodule polls before our update, dodge null string
         //when experis have data to gather, and we're not on eva
         public bool gatherEnabled { get { return m_activeShip.m_experiScienceDatas.Count > 0 && !m_activeShip.m_ship.isEVA; } }
 
@@ -620,7 +620,7 @@ namespace WhichData
             m_activeShip.ProcessMoveDatas(cont, moveable, m_activeShip.MoveEnd);
         }
 
-        public string m_cleanDesc;
+        public string m_cleanDesc = ""; //partmodule polls before our update, dodge null string
         //when there are disabled experis and we have a scientist (part module takes care of disabling lab case)
         public bool cleanEnabled { get { return m_activeShip.m_disabledExperiModules.Count > 0 && m_activeShip.m_scientistAboard; } }
 

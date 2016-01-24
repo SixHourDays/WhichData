@@ -41,14 +41,16 @@ namespace WhichData
 
         public bool Equals(DataPage other)
         {
-            if (ReferenceEquals(other, null)) { return false; }
-            if (ReferenceEquals(this, other)) { return true; }
-
-            return m_scienceData == other.m_scienceData //ref compares for ksp data is ok
-                && m_subject == other.m_subject
-                && m_dataModule == other.m_dataModule   //TODOJEFFGIFFEN these 3 may not be needed..based off global state
-                && m_fullValue == other.m_fullValue     //the next & transmit values all base off this
-                && m_labPts == other.m_labPts;          //represent the content of the labs
+            if ( ReferenceEquals(this, other) ) { return true; } //this==this
+            bool anull = ReferenceEquals(this, null);
+            bool bnull = ReferenceEquals(other, null);
+            if (anull ^ bnull) { return false; } //this==null or null==this
+            if (anull && bnull ) { return true; } //null==null or this==this
+            
+            return m_scienceData == other.m_scienceData //m_scienceData distinguishes between instances (can detect repeats)
+                && m_dataModule == other.m_dataModule   //m_dataModule distinguishes between hosts (can detect moves)
+                && Mathf.Approximately(m_fullValue, other.m_fullValue)     //the next & transmit values all base off this //TODOJEFFGIFFEN can pump updates later
+                && Mathf.Approximately(m_labPts, other.m_labPts);          //represent the content of the labs
         }
 
         //for ERD spawns
@@ -302,8 +304,8 @@ namespace WhichData
                 }
             }
 
-            //m_scienceDatas.ForEach(dp => Debug.Log("GA model"+m_index+" scandatas old " + dp.m_subject.id));
-            //scienceDatas.ForEach(dp => Debug.Log("GA model"+m_index+" scandatas new " + dp.m_subject.id));
+            //m_scienceDatas.ForEach(dp => Debug.Log("GA model"+m_index+" scandatas old " + dp + " " + dp.m_subject.id));
+            //scienceDatas.ForEach(dp => Debug.Log("GA model"+m_index+" scandatas new " + dp + " " + dp.m_subject.id));
 
             if (!scienceDatas.SequenceEqual(m_scienceDatas)) //will rely on DataPage::Equals
             {
@@ -314,6 +316,7 @@ namespace WhichData
                 m_scienceDatas = scienceDatas; //deliberate ref swap
 
                 //catch science experiment deploys in our new science pages
+                //m_flags.newScienceDatas.ForEach(dp => Debug.Log("GA model" + m_index + " scandatas delta " + dp + " " + dp.m_subject.id));
                 if (m_deployedResult != null && m_flags.newScienceDatas.Exists(dp => dp.m_scienceData == m_deployedResult))
                 {
                     m_flags.experimentDeployed = true;
