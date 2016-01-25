@@ -223,7 +223,7 @@ namespace WhichData
         //ship we refer to
         public Vessel m_ship = null;
 
-        //ship pieces
+        //ship science parts, containers and experiments
         public List<IScienceDataContainer> m_sciDataModules = new List<IScienceDataContainer>();
 
         //sciDataModules split into experiments and containers
@@ -303,6 +303,13 @@ namespace WhichData
                     scienceDatas.Add(new DataPage(cont, sd, this));
                 }
             }
+
+            //the m_scienceData list and the processor lists are mutually exclusive
+            //TODOJEFFGIFFEN if the processor supported it we could lazily maintain this list
+            scienceDatas.RemoveAll(dp=> m_discardDataQueue.m_queue.Contains(dp));
+            scienceDatas.RemoveAll(dp=> m_moveDataQueue.m_queue.Contains(dp));
+            scienceDatas.RemoveAll(dp=> m_labDataQueue.m_queue.Contains(dp));
+            scienceDatas.RemoveAll(dp=>m_transmitDataQueue.m_queue.Contains(dp));
 
             //m_scienceDatas.ForEach(dp => Debug.Log("GA model"+m_index+" scandatas old " + dp + " " + dp.m_subject.id));
             //scienceDatas.ForEach(dp => Debug.Log("GA model"+m_index+" scandatas new " + dp + " " + dp.m_subject.id));
@@ -490,6 +497,7 @@ namespace WhichData
             discards.ForEach(dp => dp.DiscardModuleData()); //note helper version will properly reset experiments
 
             m_discardDataQueue.Process(discards);
+            FireScienceEvent();
         }
         //poll2
         bool DiscardPoll(DataPage dp)
@@ -580,6 +588,7 @@ namespace WhichData
             //do this here to remove n data in 1 frame (using the DataProcessor hooks it would take n frames)
             sources.ForEach(dp => dp.m_dataModule.DumpData(dp.m_scienceData)); //note direct dump version, so experiments unusable after
             m_moveDataQueue.Process(sources);
+            FireScienceEvent();
         }
         //step 2 is DiscardPoll
         //step3
@@ -646,6 +655,7 @@ namespace WhichData
         public void ProcessLabDatas(List<DataPage> dataPages)
         {
             m_labDataQueue.Process(dataPages);
+            FireScienceEvent();
         }
         bool m_labCopying = false;
         //step1
@@ -677,6 +687,7 @@ namespace WhichData
         public void ProcessTransmitDatas(List<DataPage> datas)
         {
             m_transmitDataQueue.Process(datas);
+            FireScienceEvent();
         }
         bool m_transmitting = false;
         //step1
@@ -724,11 +735,10 @@ namespace WhichData
             m_index = i;
 
             m_cleanDataQueue = new DataProcessor<ModuleScienceExperiment>(CleanStart, CleanPoll, CleanEnd, null);
-            m_discardDataQueue = new DataProcessor<DataPage>(null, DiscardPoll, DiscardPost, FireScienceEvent);
+            m_discardDataQueue = new DataProcessor<DataPage>(null, DiscardPoll, DiscardPost, null);
             m_moveDataQueue = new DataProcessor<DataPage>(null, DiscardPoll, MoveAdd, MoveEnd);
             m_labDataQueue = new DataProcessor<DataPage>(LabStartCopy, LabIsDone, LabPostCopy, null);
             m_transmitDataQueue = new DataProcessor<DataPage>(TransmitSend, TransmitIsSent, TransmitDiscard, null);
-
 
             return errorMsg;
         }

@@ -61,20 +61,25 @@ gather right-click for pod, when any exp has data in it
 clean right-click for pod, when any exp is spent & scientist is aboard
 prompts for partial selections and why they happen
 view snaps scroll to best fit of hard selections
+model now hides datapages in processors, so button mashing cant double book selections
+container(host) sort
 
 doing:
 deal with the shutdown mid-copy thing
 sciences going to R&D should also retrigger the dialogs...bar values will change
-dialog visually matches: so trans + next trans is 1px off.....
+
 
 bugs:
-take data reacts like science deploy...overzealous event handler in model
-spamming action buttons during queued work
 control w no control!  hah
 
 todo:
+save reloading - errors?
+resolution changes?
+orbital scanner & lab research science...how do they work
+multilab behavior, multilab disconnect / reconnecting
+clean individual experiments
 update group text for when move / lab / radio is disabled
-more sorts: container
+
 save selected state & position to ship file
 
 Why the ExperimentResultDialog isn't good enough:
