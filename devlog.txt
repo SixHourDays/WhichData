@@ -64,22 +64,15 @@ view snaps scroll to best fit of hard selections
 
 doing:
 deal with the shutdown mid-copy thing
-check/solve the multiple copies in lab scenario
 sciences going to R&D should also retrigger the dialogs...bar values will change
 dialog visually matches: so trans + next trans is 1px off.....
 
 bugs:
-take which then take all doesnt close, but leaves one hanging non-existant entry
-equals finds dupes of something in cont and experi it came from...host is relevant, as is host index
 take data reacts like science deploy...overzealous event handler in model
 spamming action buttons during queued work
-doing move has highlighted that flat sci list isnt enough:
-- you can move it, get same flat order, but be in whole diff parts, no update push to sel, etc
-- similarly its possible to have to identical subjectIDs in the m_sciDataParts dictionary :-( (equals or what?)
 control w no control!  hah
 
 todo:
-
 update group text for when move / lab / radio is disabled
 more sorts: container
 save selected state & position to ship file

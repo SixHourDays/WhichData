@@ -119,15 +119,16 @@ namespace WhichData
             {
                 switch (m_state)
                 {
-                    case State.Daemon: //the gui does stuff even when not drawing
-                    case State.Picker: //these three states require our ship view
-                    case State.Review:
+                    case State.Review: //these require our ship view
                     case State.Store:
                         m_activeView.OnGUI();
                         break;
                     case State.ExternReview:
                     case State.Collect: //this requires external ship view
                         m_externView.OnGUI();
+                        break;
+                    case State.Picker:
+                    case State.Daemon:
                         break;
                     default:
                         Debug.Log("GA controller OnGUI uncaught state!!!");
@@ -339,19 +340,19 @@ namespace WhichData
 
 
                     //action button handling
-                    if (m_activeView.closeBtn)
+                    if (m_activeView.m_closeBtn)
                     {
                         m_state = State.Daemon;
                     }
 
                     //TODOJEFFGIFFEN should use reset on showReset bool
-                    if (m_activeView.discardBtn && m_discardEnabled)
+                    if (m_activeView.m_discardBtn && m_discardEnabled)
                     {
                         m_activeShip.ProcessDiscardDatas(m_activeSelectedPages, m_activeShip.FireScienceEvent);
                     }
 
                     //move btn
-                    if (m_activeView.moveBtn && m_moveEnabled)
+                    if (m_activeView.m_moveBtn && m_moveEnabled)
                     {
                         m_state = State.Picker;
                         m_activeShip.HighlightContainers(Color.cyan);
@@ -359,7 +360,7 @@ namespace WhichData
                     }
 
                     //lab button
-                    if (m_activeView.labBtn && m_labEnabled)
+                    if (m_activeView.m_labBtn && m_labEnabled)
                     {
                         //partial selection - reduce selection to labable datas
                         List<DataPage> labablePages = m_activeSelectedPages.FindAll(pg => pg.m_labPts > 0f);
@@ -369,7 +370,7 @@ namespace WhichData
                     }
 
                     //transmit button
-                    if (m_activeView.transmitBtn && m_transEnabled)
+                    if (m_activeView.m_transmitBtn && m_transEnabled)
                     {
                         m_activeShip.ProcessTransmitDatas(m_activeSelectedPages);
                     }
@@ -480,20 +481,20 @@ namespace WhichData
             }
 
             //action button handling
-            if (view.closeBtn)
+            if (view.m_closeBtn)
             {
                 CloseDialog();
             }
 
             //TODOJEFFGIFFEN should use reset on showReset bool
-            if (view.discardBtn && m_discardEnabled)
+            if (view.m_discardBtn && m_discardEnabled)
             {
                 m_shipModels[i].ProcessDiscardDatas(selection, ExternDiscardEnd);
                 CloseDialog();
             }
 
             //move btn
-            if (view.moveBtn && m_moveEnabled)
+            if (view.m_moveBtn && m_moveEnabled)
             {
                 //partial selection: discard repeats wrt container
                 selection = PruneDuplicates(dst, selection);

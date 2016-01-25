@@ -150,11 +150,11 @@ namespace WhichData
 
         //GUI state
         //out state of buttons
-        public bool closeBtn { get { return m_infoPane.closeBtn; } }
-        public bool discardBtn { get { return m_infoPane.discardBtn; } }
-        public bool moveBtn { get { return m_infoPane.moveBtn; } }
-        public bool labBtn { get { return m_infoPane.labBtn; } }
-        public bool transmitBtn { get { return m_infoPane.transmitBtn; } }
+        public bool m_closeBtn;
+        public bool m_discardBtn;
+        public bool m_moveBtn;
+        public bool m_labBtn;
+        public bool m_transmitBtn;
 
         //scroll pos of list pane
         public Vector2 m_scrollPos;
@@ -276,33 +276,11 @@ namespace WhichData
         public List<DataPage> selectedDataPages { get { return m_selectedPages.ConvertAll(vp => vp.m_src); } }
         public void OnGUI()
         {
-            switch (m_controller.m_state)
+            if (m_showUI)
             {
-                case WhichData.State.Review:
-                case WhichData.State.ExternReview:
-                case WhichData.State.Collect:
-                case WhichData.State.Store:
-                    if (m_showUI)
-                    {
-                        int uid = GUIUtility.GetControlID(FocusType.Passive); //get a nice unique window id from system
-                        GUI.skin = m_dlgSkin;
-                        m_window = GUI.Window(uid, m_window, WindowLayout, "", HighLogic.Skin.window); //style
-                        break;
-                    }
-                    //else
-                    goto case WhichData.State.Daemon; //explicit fallthrough
-                case WhichData.State.Daemon:
-                case WhichData.State.Picker:
-                    //no gui; replicate GUIButton returning false on the buttons
-                    m_infoPane.closeBtn = false;
-                    m_infoPane.discardBtn = false;
-                    m_infoPane.moveBtn = false;
-                    m_infoPane.labBtn = false;
-                    m_infoPane.transmitBtn = false;
-                    break;
-                default:
-                    Debug.Log("GA view" + m_index + " OnGUI uncaught state!!!");
-                    break;
+                int uid = GUIUtility.GetControlID(FocusType.Passive); //get a nice unique window id from system
+                GUI.skin = m_dlgSkin;
+                m_window = GUI.Window(uid, m_window, WindowLayout, "", HighLogic.Skin.window); //style
             }
         }
 
@@ -334,7 +312,7 @@ namespace WhichData
                 header.fontStyle = FontStyle.Bold;
                 header.wordWrap = false;
                 header.clipping = TextClipping.Clip;
-                GUILayout.Label(m_controller.GetHeaderString(), header);
+                GUILayout.Label(m_controller.GetHeaderString(), header); //HACKJEFFGIFFEN slowwwwww
 
                 GUILayout.FlexibleSpace(); //auto-centers by even pads
             }
@@ -490,6 +468,19 @@ namespace WhichData
 
         public void Update()
         {
+            //present last frame's button states
+            m_closeBtn = m_infoPane.closeBtn;
+            m_discardBtn = m_infoPane.discardBtn;
+            m_moveBtn = m_infoPane.moveBtn;
+            m_labBtn = m_infoPane.labBtn;
+            m_transmitBtn = m_infoPane.transmitBtn;
+            //clear this frame's button states
+            m_infoPane.closeBtn = false;
+            m_infoPane.discardBtn = false;
+            m_infoPane.moveBtn = false;
+            m_infoPane.labBtn = false;
+            m_infoPane.transmitBtn = false;
+
             if (m_showUI && m_viewPages.Count > 0)
             {
                 //list field sorting && toggle chain logic
